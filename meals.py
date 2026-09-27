@@ -1,5 +1,7 @@
 import db
 
+MAX_MEAL_NAME_LENGTH = 50
+
 
 def create_meal(
     user_id,
@@ -21,6 +23,8 @@ def create_meal(
     meal_type = (meal_type or "").strip()
     if not name:
         raise ValueError("Meal name cannot be empty.")
+    if len(name) > MAX_MEAL_NAME_LENGTH:
+        raise ValueError("Meal name cannot be longer than 50 characters.")
     if not meal_type:
         raise ValueError("Meal type cannot be empty.")
 
@@ -89,6 +93,8 @@ def update_meal(meal_id, **fields):
             continue
         if key in {"name", "meal_type"}:
             value = (value or "").strip()
+        if key == "name" and len(value) > MAX_MEAL_NAME_LENGTH:
+            raise ValueError("Meal name cannot be longer than 50 characters.")
         if key in {"calories"}:
             value = int(value or 0)
         if key in {"protein", "carbs", "fat", "price"}:

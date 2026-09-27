@@ -351,16 +351,19 @@ def edit_meal(meal_id):
         return "Unauthorized", 403
 
     if request.method == "POST":
-        meals.update_meal(
-            meal_id,
-            name=request.form["name"],
-            meal_type=request.form["meal_type"],
-            calories=request.form.get("calories", 0),
-            protein=request.form.get("protein", 0),
-            carbs=request.form.get("carbs", 0),
-            fat=request.form.get("fat", 0),
-            price=request.form.get("price", 0),
-        )
+        try:
+            meals.update_meal(
+                meal_id,
+                name=request.form["name"],
+                meal_type=request.form["meal_type"],
+                calories=request.form.get("calories", 0),
+                protein=request.form.get("protein", 0),
+                carbs=request.form.get("carbs", 0),
+                fat=request.form.get("fat", 0),
+                price=request.form.get("price", 0),
+            )
+        except ValueError as error:
+            return render_template("edit_meal.html", meal=meal, diets=get_diets(), errors=[str(error)])
         return redirect("/")
 
     return render_template("edit_meal.html", meal=meal, diets=get_diets())
@@ -408,6 +411,8 @@ def add_meal():
             "meal_type": "Meal type is required.",
         },
     )
+    if len(name.strip()) > meals.MAX_MEAL_NAME_LENGTH:
+        errors.append("Meal name cannot be longer than 50 characters.")
 
     if errors:
         return render_form_with_errors(

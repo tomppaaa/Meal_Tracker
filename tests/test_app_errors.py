@@ -58,3 +58,47 @@ def test_meal_type_search_filters_results(client):
         user = users.get_user_by_username(username)
         if user:
             users.delete_user(user['id'])
+
+
+def test_meal_name_maximum_length_is_validated_before_insert(client):
+    with app.app_context():
+        username = 'meal-name-length-user'
+        user = users.get_user_by_username(username)
+        if user:
+            users.delete_user(user['id'])
+
+        user_id = users.create_user(username, 'secret123')
+        meals.create_meal(user_id=user_id, name='a' * 50, meal_type='Dinner')
+
+        with pytest.raises(ValueError, match='50 characters'):
+            meals.create_meal(user_id=user_id, name='a' * 51, meal_type='Dinner')
+
+        user_meals = meals.get_meals_by_user(user_id)
+        assert len(user_meals) == 1
+        assert len(user_meals[0]['name']) == 50
+
+        users.delete_user(user_id)
+
+
+def test_add_meal_route_rejects_name_longer_than_50_characters(client):
+    with app.app_context():
+        username = 'add-route-length-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+
+    response = client.post(
+        '/add_meal',
+        data={'name': 'a' * 51, 'meal_type': 'Dinner'},
+    )
+
+    assert response.status_code == 200
+    assert b'Meal name cannot be longer than 50 characters.' in response.data
+
+    with app.app_context():
+        assert meals.get_meals_by_user(user_id) == []
+        users.delete_user(user_id)

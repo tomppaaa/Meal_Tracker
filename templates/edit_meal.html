@@ -6,10 +6,20 @@
     <section class="meal-card">
         <h2>Edit meal</h2>
 
+        {% if errors %}
+            <div class="form-error">
+                <ul>
+                    {% for error in errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
         <form action="/meal/{{ meal.id }}/edit" method="POST">
             <p>
                 <label for="name">Meal name:</label><br>
-                <input type="text" id="name" name="name" value="{{ meal.name }}" required>
+                <input type="text" id="name" name="name" value="{{ meal.name }}" maxlength="50" required>
             </p>
 
             <p>

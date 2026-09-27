@@ -19,7 +19,7 @@
         <form action="/add_meal" method="POST">
             <p>
                 <label for="name">Meal name:</label><br>
-                <input type="text" id="name" name="name" value="{{ meal_name or '' }}" required>
+                <input type="text" id="name" name="name" value="{{ meal_name or '' }}" maxlength="50" required>
             </p>
 
             <p>
