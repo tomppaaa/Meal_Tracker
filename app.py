@@ -337,7 +337,115 @@ def meal_detail(meal_id):
     meal = meals.get_meal_by_id(meal_id)
     if not meal:
         return "Meal not found", 404
-    return render_template("meal_detail.html", meal=meal, diets=get_diets())
+    comments = db.get_meal_comments(meal_id)
+    ratings = db.get_meal_rating_summary(meal_id, session.get("user_id"))
+    return render_template("meal_detail.html", meal=meal, comments=comments, comment_error=None, ratings=ratings, rating_error=None, diets=get_diets())
+
+
+@app.route("/meals/<int:meal_id>/comments", methods=["POST"])
+@app.route("/meal/<int:meal_id>/comments", methods=["POST"])
+def add_meal_comment(meal_id):
+    meal = meals.get_meal_by_id(meal_id)
+    if not meal:
+        return "Meal not found", 404
+
+    if not session.get("user_id"):
+        return redirect("/login")
+
+    comment_body = request.form.get("comment", "").strip()
+    if not comment_body:
+        return render_template(
+            "meal_detail.html",
+            meal=meal,
+            comments=db.get_meal_comments(meal_id),
+            comment_error="Comment cannot be empty.",
+            comment_body=comment_body,
+            ratings=db.get_meal_rating_summary(meal_id, session.get("user_id")),
+            rating_error=None,
+            diets=get_diets(),
+        )
+    if len(comment_body) > 1000:
+        return render_template(
+            "meal_detail.html",
+            meal=meal,
+            comments=db.get_meal_comments(meal_id),
+            comment_error="Comment cannot be longer than 1000 characters.",
+            comment_body=comment_body,
+            ratings=db.get_meal_rating_summary(meal_id, session.get("user_id")),
+            rating_error=None,
+            diets=get_diets(),
+        )
+
+    db.add_meal_comment(meal_id, session.get("user_name"), comment_body)
+    return redirect(f"/meal/{meal_id}")
+
+
+@app.route("/meals/<int:meal_id>/comments/<int:comment_id>/reply", methods=["POST"])
+@app.route("/meal/<int:meal_id>/comments/<int:comment_id>/reply", methods=["POST"])
+def reply_to_meal_comment(meal_id, comment_id):
+    meal = meals.get_meal_by_id(meal_id)
+    if not meal:
+        return "Meal not found", 404
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+    if user_id != meal["user_id"]:
+        return "Unauthorized", 403
+
+    parent_comments = db.query(
+        "SELECT id FROM meal_comments WHERE id = ? AND meal_id = ?",
+        (comment_id, meal_id),
+    )
+    if not parent_comments:
+        return "Comment not found", 404
+
+    reply_body = request.form.get("reply", "").strip()
+    if not reply_body or len(reply_body) > 1000:
+        error = "Reply cannot be empty." if not reply_body else "Reply cannot be longer than 1000 characters."
+        return render_template(
+            "meal_detail.html",
+            meal=meal,
+            comments=db.get_meal_comments(meal_id),
+            comment_error=None,
+            ratings=db.get_meal_rating_summary(meal_id, user_id),
+            rating_error=None,
+            reply_error=error,
+            reply_comment_id=comment_id,
+            reply_body=reply_body,
+            diets=get_diets(),
+        )
+
+    db.add_meal_comment(meal_id, session.get("user_name"), reply_body, comment_id)
+    return redirect(f"/meal/{meal_id}")
+
+
+@app.route("/meals/<int:meal_id>/rating", methods=["POST"])
+@app.route("/meal/<int:meal_id>/rating", methods=["POST"])
+def rate_meal(meal_id):
+    meal = meals.get_meal_by_id(meal_id)
+    if not meal:
+        return "Meal not found", 404
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+
+    try:
+        rating = int(request.form.get("rating", ""))
+        db.save_meal_rating(meal_id, user_id, rating)
+    except (TypeError, ValueError):
+        return render_template(
+            "meal_detail.html",
+            meal=meal,
+            comments=db.get_meal_comments(meal_id),
+            comment_error=None,
+            ratings=db.get_meal_rating_summary(meal_id, user_id),
+            rating_error="Choose a rating from 1 to 5 stars.",
+            diets=get_diets(),
+        )
+
+    return redirect(f"/meal/{meal_id}")
 
 
 @app.route("/meals/<int:meal_id>/edit", methods=["GET", "POST"])

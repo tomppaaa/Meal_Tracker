@@ -12,6 +12,28 @@
         <p><strong>Fat:</strong> {{ meal.fat or 0 }} g</p>
         <p><strong>Price:</strong> €{{ meal.price or 0.0 }}</p>
 
+        <section class="rating-section">
+            <h3>Rating</h3>
+            <p class="rating-summary">{{ ratings.average }}/5 stars ({{ ratings.count }} ratings)</p>
+            {% if session.get('user_id') %}
+                {% if rating_error %}
+                    <div class="form-error">{{ rating_error }}</div>
+                {% endif %}
+                <form action="/meal/{{ meal.id }}/rating" method="POST" class="rating-form">
+                    <fieldset>
+                        <legend>Your rating</legend>
+                        <div class="rating-stars" aria-label="Choose a rating from 1 to 5 stars">
+                            {% for value in range(5, 0, -1) %}
+                                <button type="submit" name="rating" value="{{ value }}" class="star-button {% if ratings.user_rating and value <= ratings.user_rating %}is-selected{% endif %}" title="{{ value }} out of 5 stars" aria-label="{{ value }} out of 5 stars">★</button>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+                </form>
+            {% else %}
+                <p><a href="/login" class="action-link">Log in</a> to rate this meal.</p>
+            {% endif %}
+        </section>
+
         {% if session.get('user_id') == meal.user_id %}
             <div class="meal-actions">
                 <a href="/meal/{{ meal.id }}/edit" class="action-link">Edit</a>
@@ -20,6 +42,55 @@
                 </form>
             </div>
         {% endif %}
+
+        <section class="comments-section">
+            <h3>Comments</h3>
+
+            {% if session.get('user_id') %}
+                {% if comment_error %}
+                    <div class="form-error">{{ comment_error }}</div>
+                {% endif %}
+                <form action="/meal/{{ meal.id }}/comments" method="POST" class="comment-form">
+                    <label for="comment">Add a comment:</label>
+                    <textarea id="comment" name="comment" rows="4" maxlength="1000" required>{{ comment_body or '' }}</textarea>
+                    <button type="submit">Post comment</button>
+                </form>
+            {% else %}
+                <p><a href="/login" class="action-link">Log in</a> to add a comment.</p>
+            {% endif %}
+
+            {% if comments %}
+                <div class="comments-list">
+                    {% for comment in comments %}
+                        <article class="comment">
+                            <p class="comment-meta"><strong>{{ comment.author }}</strong> · {{ comment.created_at }}</p>
+                            <p>{{ comment.body }}</p>
+                            {% if session.get('user_id') == meal.user_id %}
+                                <details class="reply-details" {% if reply_error and reply_comment_id == comment.id %}open{% endif %}>
+                                    <summary>Reply</summary>
+                                    {% if reply_error and reply_comment_id == comment.id %}
+                                        <div class="form-error">{{ reply_error }}</div>
+                                    {% endif %}
+                                    <form action="/meal/{{ meal.id }}/comments/{{ comment.id }}/reply" method="POST" class="reply-form">
+                                        <label for="reply-{{ comment.id }}">Your reply</label>
+                                        <textarea id="reply-{{ comment.id }}" name="reply" rows="2" maxlength="1000">{% if reply_comment_id == comment.id %}{{ reply_body or '' }}{% endif %}</textarea>
+                                        <button type="submit">Post reply</button>
+                                    </form>
+                                </details>
+                            {% endif %}
+                            {% for reply in comments if reply.parent_comment_id == comment.id %}
+                                <article class="comment-reply">
+                                    <p class="comment-meta"><strong>{{ reply.author }}</strong> · {{ reply.created_at }}</p>
+                                    <p>{{ reply.body }}</p>
+                                </article>
+                            {% endfor %}
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p>No comments yet.</p>
+            {% endif %}
+        </section>
 
         <p>
             <a href="/" class="action-link">Back to home</a>

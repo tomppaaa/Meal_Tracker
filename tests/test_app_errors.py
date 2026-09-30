@@ -102,3 +102,113 @@ def test_add_meal_route_rejects_name_longer_than_50_characters(client):
     with app.app_context():
         assert meals.get_meals_by_user(user_id) == []
         users.delete_user(user_id)
+
+
+def test_meal_comments_can_be_added_and_empty_comments_are_rejected(client):
+    with app.app_context():
+        username = 'meal-comment-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+        meal_id = meals.create_meal(user_id=user_id, name='Comment meal', meal_type='Lunch')
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+        session['user_name'] = username
+
+    empty_response = client.post(f'/meal/{meal_id}/comments', data={'comment': '   '})
+    assert empty_response.status_code == 200
+    assert b'Comment cannot be empty.' in empty_response.data
+
+    response = client.post(
+        f'/meal/{meal_id}/comments',
+        data={'comment': 'Tasty and easy to make.'},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert b'Tasty and easy to make.' in response.data
+    assert b'meal-comment-user' in response.data
+
+    with app.app_context():
+        comments = db.get_meal_comments(meal_id)
+        assert len(comments) == 1
+        assert comments[0]['body'] == 'Tasty and easy to make.'
+        users.delete_user(user_id)
+
+
+def test_only_meal_owner_can_reply_to_comments(client):
+    with app.app_context():
+        owner_name = 'meal-owner-user'
+        commenter_name = 'meal-commenter-user'
+        for username in (owner_name, commenter_name):
+            old_user = users.get_user_by_username(username)
+            if old_user:
+                users.delete_user(old_user['id'])
+        owner_id = users.create_user(owner_name, 'secret123')
+        commenter_id = users.create_user(commenter_name, 'secret123')
+        meal_id = meals.create_meal(user_id=owner_id, name='Reply meal', meal_type='Lunch')
+        comment_id = db.add_meal_comment(meal_id, commenter_name, 'Please share the recipe.')
+
+    with client.session_transaction() as session:
+        session['user_id'] = commenter_id
+        session['user_name'] = commenter_name
+    forbidden_response = client.post(
+        f'/meal/{meal_id}/comments/{comment_id}/reply',
+        data={'reply': 'Here is the recipe.'},
+    )
+    assert forbidden_response.status_code == 403
+
+    with client.session_transaction() as session:
+        session['user_id'] = owner_id
+        session['user_name'] = owner_name
+    response = client.post(
+        f'/meal/{meal_id}/comments/{comment_id}/reply',
+        data={'reply': 'Here is the recipe.'},
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert b'Here is the recipe.' in response.data
+    assert b'<summary>Reply</summary>' in response.data
+
+    with app.app_context():
+        replies = db.query(
+            "SELECT * FROM meal_comments WHERE parent_comment_id = ?",
+            (comment_id,),
+        )
+        assert len(replies) == 1
+        users.delete_user(owner_id)
+        users.delete_user(commenter_id)
+
+
+def test_meal_rating_can_be_saved_and_updated(client):
+    with app.app_context():
+        username = 'meal-rating-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+        meal_id = meals.create_meal(user_id=user_id, name='Rated meal', meal_type='Dinner')
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+        session['user_name'] = username
+
+    invalid_response = client.post(f'/meal/{meal_id}/rating', data={'rating': '6'})
+    assert invalid_response.status_code == 200
+    assert b'Choose a rating from 1 to 5 stars.' in invalid_response.data
+
+    response = client.post(f'/meal/{meal_id}/rating', data={'rating': '4'}, follow_redirects=True)
+    assert response.status_code == 200
+    assert b'4.0/5 stars (1 ratings)' in response.data
+    assert b'class="rating-stars"' in response.data
+    assert b'Save rating' not in response.data
+
+    client.post(f'/meal/{meal_id}/rating', data={'rating': '5'})
+    with app.app_context():
+        rating = db.get_meal_rating_summary(meal_id, user_id)
+        assert rating['average'] == 5.0
+        assert rating['count'] == 1
+        assert rating['user_rating'] == 5
+        users.delete_user(user_id)
