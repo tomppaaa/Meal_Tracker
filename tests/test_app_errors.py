@@ -44,6 +44,33 @@ def test_meal_type_search_filters_results(client):
         if user:
             users.delete_user(user['id'])
 
+
+def test_profile_meals_shows_statistics_by_type_and_diet(client):
+    with app.app_context():
+        username = 'profile-stats-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+        meals.create_meal(user_id=user_id, name='Stats breakfast', meal_type='Breakfast', calories=300, price=4, diet_tags='2')
+        meals.create_meal(user_id=user_id, name='Stats dinner', meal_type='Dinner', calories=700, price=8, diet_tags='1,4')
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+        session['user_name'] = username
+
+    response = client.get('/profile/meals')
+
+    assert response.status_code == 200
+    assert b"By meal type" in response.data
+    assert b"By diet" in response.data
+    assert b"Breakfast" in response.data
+    assert b"Vegan" in response.data
+    assert b"2" in response.data
+
+    with app.app_context():
+        users.delete_user(user_id)
+
         user_id = users.create_user(username, 'secret123')
         meals.create_meal(user_id=user_id, name='Breakfast search meal', meal_type='Breakfast', calories=200, protein=10, carbs=20, fat=5, price=5.0)
         meals.create_meal(user_id=user_id, name='Dinner search meal', meal_type='Dinner', calories=400, protein=20, carbs=30, fat=15, price=9.5)

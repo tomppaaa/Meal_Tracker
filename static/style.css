@@ -115,6 +115,61 @@ nav a:hover,
     box-sizing: border-box;
 }
 
+.stats-overview,
+.stats-group {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.stats-overview {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    margin-bottom: 1.25rem;
+}
+
+.stat-item {
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.85rem;
+}
+
+.stat-item strong,
+.stat-item span {
+    display: block;
+}
+
+.stat-item strong {
+    color: #475569;
+    font-size: 0.85rem;
+}
+
+.stat-item span {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin-top: 0.2rem;
+}
+
+.stats-group {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.stats-table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.stats-table th,
+.stats-table td {
+    border-bottom: 1px solid #e5e7eb;
+    padding: 0.55rem 0.4rem;
+    text-align: left;
+}
+
+.stats-table th {
+    color: #475569;
+    font-size: 0.85rem;
+}
+
 .meal-actions {
     display: flex;
     align-items: center;

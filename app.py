@@ -105,6 +105,38 @@ def build_profile_view(user_id, user=None):
     }
 
 
+def build_meal_statistics(user_id):
+    user_meals = meals.get_meals_by_user(user_id)
+    diet_names = {str(diet["id"]): diet["name"] for diet in get_diets()}
+
+    def summarize(meal_list):
+        count = len(meal_list)
+        return {
+            "count": count,
+            "calories": sum((meal.get("calories") or 0) for meal in meal_list),
+            "protein": sum((meal.get("protein") or 0) for meal in meal_list),
+            "carbs": sum((meal.get("carbs") or 0) for meal in meal_list),
+            "fat": sum((meal.get("fat") or 0) for meal in meal_list),
+            "price": sum((meal.get("price") or 0) for meal in meal_list),
+            "average_calories": (sum((meal.get("calories") or 0) for meal in meal_list) / count) if count else 0,
+        }
+
+    grouped_by_type = {}
+    grouped_by_diet = {}
+    for meal in user_meals:
+        grouped_by_type.setdefault(meal["meal_type"], []).append(meal)
+        for diet_id in (meal.get("diet_tags") or "").split(","):
+            diet_name = diet_names.get(diet_id.strip())
+            if diet_name:
+                grouped_by_diet.setdefault(diet_name, []).append(meal)
+
+    return {
+        "overall": summarize(user_meals),
+        "by_type": [(name, summarize(group)) for name, group in sorted(grouped_by_type.items())],
+        "by_diet": [(name, summarize(group)) for name, group in sorted(grouped_by_diet.items())],
+    }
+
+
 @app.route("/register")
 def register():
     return render_template("register.html", errors=[], username="")
@@ -183,6 +215,21 @@ def profile():
 
     context = build_profile_view(user_id, user)
     return render_form_with_errors("profile.html", errors=[], **context)
+
+
+@app.route("/profile/meals")
+def profile_meals():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+
+    user = users.get_user_by_id(user_id)
+    if not user:
+        session.pop("user_id", None)
+        session.pop("user_name", None)
+        return redirect("/login")
+
+    return render_template("profile_meals.html", user=user, statistics=build_meal_statistics(user_id))
 
 
 @app.route("/user/<int:user_id>")
