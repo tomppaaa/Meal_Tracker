@@ -1,3 +1,6 @@
+import hmac
+import secrets
+
 from flask import Flask, request, redirect, session
 from flask import render_template
 import sqlite3, db, config, users, meals
@@ -8,6 +11,29 @@ app.secret_key = config.SECRET_KEY
 db.ensure_meals_schema()
 
 ALL_MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snack", "Evening meal"]
+
+
+def get_csrf_token():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_urlsafe(32)
+    return session["csrf_token"]
+
+
+@app.context_processor
+def inject_csrf_token():
+    return {"csrf_token": get_csrf_token()}
+
+
+@app.before_request
+def protect_from_csrf():
+    if request.method != "POST":
+        return None
+
+    submitted_token = request.form.get("csrf_token", "")
+    session_token = session.get("csrf_token", "")
+    if not session_token or not submitted_token or not hmac.compare_digest(submitted_token, session_token):
+        return "Invalid CSRF token", 403
+    return None
 
 
 def get_diets():
@@ -167,6 +193,7 @@ def create():
 
     session["user_id"] = user_id
     session["user_name"] = username
+    session["csrf_token"] = secrets.token_urlsafe(32)
     return redirect("/")
 
 @app.route("/login", methods=["GET", "POST"])
@@ -191,6 +218,7 @@ def login():
 
         session["user_id"] = user["id"]
         session["user_name"] = user["username"]
+        session["csrf_token"] = secrets.token_urlsafe(32)
         return redirect("/")
 
     return render_form_with_errors("login.html", errors=[], username="")

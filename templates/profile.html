@@ -26,6 +26,7 @@
     <section class="meal-card">
         <h2>Change username</h2>
         <form action="/profile/change-username" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <p>
                 <label for="new_username">New username:</label><br>
                 <input type="text" id="new_username" name="new_username" value="{{ user.username }}" required>
@@ -41,6 +42,7 @@
     <section class="meal-card">
         <h2>Change password</h2>
         <form action="/profile/change-password" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <p>
                 <label for="current_password">Current password:</label><br>
                 <input type="password" id="current_password" name="current_password" required>
@@ -60,6 +62,7 @@
     <section class="meal-card">
         <h2>Delete account</h2>
         <form action="/profile/delete-account" method="POST" onsubmit="return confirm('This will permanently delete your account and all your meals. Continue?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <p>
                 <label for="password">Confirm password to delete account:</label><br>
                 <input type="password" id="password" name="password" required>

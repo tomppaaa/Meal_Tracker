@@ -6,6 +6,7 @@
     <h2>Send message</h2>
 
     <form action="/result" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label for="message">Message:</label><br>
         <textarea id="message" name="message" rows="5" cols="40" required></textarea>
 

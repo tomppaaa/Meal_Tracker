@@ -20,6 +20,7 @@
                     <div class="form-error">{{ rating_error }}</div>
                 {% endif %}
                 <form action="/meal/{{ meal.id }}/rating" method="POST" class="rating-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <fieldset>
                         <legend>Your rating</legend>
                         <div class="rating-stars" aria-label="Choose a rating from 1 to 5 stars">
@@ -38,6 +39,7 @@
             <div class="meal-actions">
                 <a href="/meal/{{ meal.id }}/edit" class="action-link">Edit</a>
                 <form action="/meal/{{ meal.id }}/delete" method="POST" onsubmit="return confirm('Are you sure you want to delete this meal?');" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="danger-button">Delete meal</button>
                 </form>
             </div>
@@ -51,6 +53,7 @@
                     <div class="form-error">{{ comment_error }}</div>
                 {% endif %}
                 <form action="/meal/{{ meal.id }}/comments" method="POST" class="comment-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <label for="comment">Add a comment:</label>
                     <textarea id="comment" name="comment" rows="4" maxlength="1000" required>{{ comment_body or '' }}</textarea>
                     <button type="submit">Post comment</button>
@@ -72,6 +75,7 @@
                                         <div class="form-error">{{ reply_error }}</div>
                                     {% endif %}
                                     <form action="/meal/{{ meal.id }}/comments/{{ comment.id }}/reply" method="POST" class="reply-form">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                         <label for="reply-{{ comment.id }}">Your reply</label>
                                         <textarea id="reply-{{ comment.id }}" name="reply" rows="2" maxlength="1000">{% if reply_comment_id == comment.id %}{{ reply_body or '' }}{% endif %}</textarea>
                                         <button type="submit">Post reply</button>

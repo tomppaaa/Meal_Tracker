@@ -10,13 +10,19 @@ from app import app
 def client():
     app.config['TESTING'] = True
     with app.test_client() as client:
+        with client.session_transaction() as session:
+            session['csrf_token'] = 'test-csrf-token'
         yield client
+
+
+def csrf_data(client, data):
+    return {**data, 'csrf_token': 'test-csrf-token'}
 
 
 def test_register_error_renders_form(client):
     response = client.post(
         '/create',
-        data={'username': 'alice', 'password1': 'abc', 'password2': 'def'},
+        data=csrf_data(client, {'username': 'alice', 'password1': 'abc', 'password2': 'def'}),
         follow_redirects=False,
     )
 
@@ -28,13 +34,43 @@ def test_register_error_renders_form(client):
 def test_login_error_renders_form(client):
     response = client.post(
         '/login',
-        data={'username': 'no-such-user', 'password': 'wrong'},
+        data=csrf_data(client, {'username': 'no-such-user', 'password': 'wrong'}),
         follow_redirects=False,
     )
 
     assert response.status_code == 200
     assert b'Sign in' in response.data
     assert b'Invalid username or password' in response.data
+
+
+def test_csrf_token_is_required_and_rotated_after_login(client):
+    with app.app_context():
+        username = 'csrf-login-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        users.create_user(username, 'secret123')
+
+    missing_token_response = client.post(
+        '/login',
+        data={'username': username, 'password': 'secret123'},
+    )
+    assert missing_token_response.status_code == 403
+
+    with client.session_transaction() as session:
+        old_token = session['csrf_token']
+    response = client.post(
+        '/login',
+        data=csrf_data(client, {'username': username, 'password': 'secret123'}),
+    )
+
+    assert response.status_code == 302
+    with client.session_transaction() as session:
+        assert session['csrf_token'] != old_token
+
+    with app.app_context():
+        user = users.get_user_by_username(username)
+        users.delete_user(user['id'])
 
 
 def test_meal_type_search_filters_results(client):
@@ -120,7 +156,7 @@ def test_add_meal_route_rejects_name_longer_than_50_characters(client):
 
     response = client.post(
         '/add_meal',
-        data={'name': 'a' * 51, 'meal_type': 'Dinner'},
+        data=csrf_data(client, {'name': 'a' * 51, 'meal_type': 'Dinner'}),
     )
 
     assert response.status_code == 200
@@ -144,13 +180,13 @@ def test_meal_comments_can_be_added_and_empty_comments_are_rejected(client):
         session['user_id'] = user_id
         session['user_name'] = username
 
-    empty_response = client.post(f'/meal/{meal_id}/comments', data={'comment': '   '})
+    empty_response = client.post(f'/meal/{meal_id}/comments', data=csrf_data(client, {'comment': '   '}))
     assert empty_response.status_code == 200
     assert b'Comment cannot be empty.' in empty_response.data
 
     response = client.post(
         f'/meal/{meal_id}/comments',
-        data={'comment': 'Tasty and easy to make.'},
+        data=csrf_data(client, {'comment': 'Tasty and easy to make.'}),
         follow_redirects=True,
     )
 
@@ -183,7 +219,7 @@ def test_only_meal_owner_can_reply_to_comments(client):
         session['user_name'] = commenter_name
     forbidden_response = client.post(
         f'/meal/{meal_id}/comments/{comment_id}/reply',
-        data={'reply': 'Here is the recipe.'},
+        data=csrf_data(client, {'reply': 'Here is the recipe.'}),
     )
     assert forbidden_response.status_code == 403
 
@@ -192,7 +228,7 @@ def test_only_meal_owner_can_reply_to_comments(client):
         session['user_name'] = owner_name
     response = client.post(
         f'/meal/{meal_id}/comments/{comment_id}/reply',
-        data={'reply': 'Here is the recipe.'},
+        data=csrf_data(client, {'reply': 'Here is the recipe.'}),
         follow_redirects=True,
     )
     assert response.status_code == 200
@@ -222,17 +258,17 @@ def test_meal_rating_can_be_saved_and_updated(client):
         session['user_id'] = user_id
         session['user_name'] = username
 
-    invalid_response = client.post(f'/meal/{meal_id}/rating', data={'rating': '6'})
+    invalid_response = client.post(f'/meal/{meal_id}/rating', data=csrf_data(client, {'rating': '6'}))
     assert invalid_response.status_code == 200
     assert b'Choose a rating from 1 to 5 stars.' in invalid_response.data
 
-    response = client.post(f'/meal/{meal_id}/rating', data={'rating': '4'}, follow_redirects=True)
+    response = client.post(f'/meal/{meal_id}/rating', data=csrf_data(client, {'rating': '4'}), follow_redirects=True)
     assert response.status_code == 200
     assert b'4.0/5 stars (1 ratings)' in response.data
     assert b'class="rating-stars"' in response.data
     assert b'Save rating' not in response.data
 
-    client.post(f'/meal/{meal_id}/rating', data={'rating': '5'})
+    client.post(f'/meal/{meal_id}/rating', data=csrf_data(client, {'rating': '5'}))
     with app.app_context():
         rating = db.get_meal_rating_summary(meal_id, user_id)
         assert rating['average'] == 5.0

@@ -17,6 +17,7 @@
         {% endif %}
 
         <form action="/add_meal" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <p>
                 <label for="name">Meal name:</label><br>
                 <input type="text" id="name" name="name" value="{{ meal_name or '' }}" maxlength="50" required>
