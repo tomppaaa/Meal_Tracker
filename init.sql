@@ -5,14 +5,23 @@ CREATE TABLE IF NOT EXISTS diets (
     name TEXT UNIQUE NOT NULL
 );
 
-DELETE FROM diets WHERE id NOT IN (1, 2, 3, 4);
-
-INSERT INTO diets (id, name) VALUES
+INSERT OR IGNORE INTO diets (id, name) VALUES
     (1, 'Keto'),
     (2, 'Vegan'),
     (3, 'Gluten-free'),
-    (4, 'High-protein')
-ON CONFLICT(id) DO UPDATE SET name = excluded.name;
+    (4, 'High-protein');
+
+CREATE TABLE IF NOT EXISTS meal_types (
+    id INTEGER PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL
+);
+
+INSERT OR IGNORE INTO meal_types (id, name) VALUES
+    (1, 'Breakfast'),
+    (2, 'Lunch'),
+    (3, 'Dinner'),
+    (4, 'Snack'),
+    (5, 'Evening meal');
 
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

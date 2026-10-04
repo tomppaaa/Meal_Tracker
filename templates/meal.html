@@ -26,11 +26,9 @@
             <p>
                 <label for="meal_type">Meal type:</label><br>
                 <select id="meal_type" name="meal_type" required>
-                    <option value="Breakfast" {% if meal_type_value == 'Breakfast' %}selected{% endif %}>Breakfast</option>
-                    <option value="Lunch" {% if meal_type_value == 'Lunch' %}selected{% endif %}>Lunch</option>
-                    <option value="Dinner" {% if meal_type_value == 'Dinner' %}selected{% endif %}>Dinner</option>
-                    <option value="Snack" {% if meal_type_value == 'Snack' %}selected{% endif %}>Snack</option>
-                    <option value="Evening meal" {% if meal_type_value == 'Evening meal' %}selected{% endif %}>Evening meal</option>
+                    {% for meal_type in meal_types %}
+                        <option value="{{ meal_type.name }}" {% if meal_type_value == meal_type.name %}selected{% endif %}>{{ meal_type.name }}</option>
+                    {% endfor %}
                 </select>
             </p>
 

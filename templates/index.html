@@ -23,9 +23,9 @@
                 <p>Meal type:</p>
                 {% for meal_type in all_meal_types %}
                     <label class="diet-option">
-                        <input type="checkbox" name="meal_types" value="{{ meal_type }}"
-                            {% if meal_type in selected_meal_types %}checked{% endif %}>
-                        {{ meal_type }}
+                        <input type="checkbox" name="meal_types" value="{{ meal_type.name }}"
+                            {% if meal_type.name in selected_meal_types %}checked{% endif %}>
+                        {{ meal_type.name }}
                     </label>
                 {% endfor %}
             </div>

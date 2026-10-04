@@ -1,65 +1,54 @@
-## Välipalautus 1
+# Meal Tracker
 
-- Sovelluksessa voi tallentaa päivän aikana syötyjä annoksia, niiden sisältämiä makroja ja reseptejä.
-- Sovellukseen voi kirjautua sisään ja sieltä voi kirjautua ulos.
-- Käyttäjä voi lisätä, muokata ja poistaa annoksia.
-- Käyttäjä voi lisätä reseptejä annoksiin.
-- Kirjautunut käyttäjä näkee tallennetut annokset, makrojen määrän ja suosituksia lähitulevaisuuteen.
-- Käyttäjä voi hakea dataa valitsemansa aikajakson perusteella.
-- Annosnäkymästä voi lisätä annoksiin raaka-aineita ja makroja.
-- Tekoälyä voi hyödyntää reseptisuosituksissa tallennetun datan pohjalta.
+Meal Tracker is a Flask web application for recording, browsing, and managing meals. It stores meal and account data in SQLite and supports searching meals by name, price, meal type, and diet category.
 
-## Välipalautus 2
+## Features
 
-- Käyttäjä voi kirjautua, rekisteröityä ja hallita omaa profiiliaan.
-- Etusivulla on haku, jolla voi löytää annoksia nimen, hinnan ja tyypin perusteella.
-- Käyttäjä voi lisätä, muokata ja poistaa omia annoksia sekä tarkastella niiden tietoja.
-- Aterioiden hinta ja makrot näkyvät helposti käyttöliittymässä.
-- Sovellus käyttää SQLite-tietokantaa ja ylläpitää käyttäjäkohtaisia annoksia.
-- Profiilisivulla on mahdollista vaihtaa salasana ja poistaa tili.
-- Olin ottanut huomioon ensimmäisen välipalautuksen palautteen ja yritän tehdä sovelluksesta kurssin mukaisen.
-- Aihe on vielä elävä ja projekti saattaa muuttua reseptipankiksi tulevaisuudessa.
-- Repo saattaa vielä sisältää kurssin harjoitusmateriaalin testaamisesta jääneitä lomakkeita ja toimintoja. Nämä siivotaan pois seuraavaan välipalautukseen mennessä.
+- Create an account, sign in, and sign out.
+- Manage your profile by changing your username or password, viewing meal statistics, or deleting your account.
+- Add, edit, and delete your own meals, including meal type, calories, protein, carbohydrates, fat, price, and diet categories.
+- Browse meal details and view meals shared by other users.
+- Search and filter meals by name, minimum or maximum price, meal type, and diet category.
+- Comment on meals, reply to comments on your own meals, and rate meals from one to five stars.
+- View meal statistics by meal type and diet category, including calorie and price totals.
+- Use database-backed meal types and diet categories, initialized with default values when the application starts.
+- Benefit from server-side validation for text lengths and numeric values, along with CSRF protection for form submissions.
 
-## Välipalautus 3
+## Setup
 
-Sovellukseen on lisätty syötteiden tarkastaminen ennen tietokantaan lisäämistä. Sovelluksen ulkoasua on muokattu, ja kurssimateriaalin esimerkin mukaan on luotu tiedosto, jota käytetään pohjana jokaisella sivulla. Repoa on siivottu, ja sivupohjilla on nyt paremmat nimet. Validointien pitäisi olla nyt kattavampia. Pylint-työkalu on otettu käyttöön tarkastamaan sovelluksen Python-koodia.
+1. Clone the repository and open a terminal in the project directory:
 
-## Kuinka sovellusta testataan toisella koneella
-
-1. Kopioi projekti toiselle koneelle GitHubista tai zip-tiedostona.
-2. Voit myös kloonata repon komennolla:
    ```bash
-   git clone https://github.com/tomppaaa/Meal_tracker.git
+   git clone https://github.com/tomppaaa/Meal_Tracker.git
+   cd Meal_Tracker
    ```
-3. Avaa terminaali projektin juurihakemistoon.
-4. Varmista, että Python 3 on asennettu.
-5. Asenna tarvittavat riippuvuudet:
-   ```bash
-   python3 -m pip install flask
-   ```
-6. Asenna projektin riippuvuudet:
+
+2. Make sure Python 3 is installed, then install the dependencies:
+
    ```bash
    python3 -m pip install -r requirements.txt
    ```
-7. Varmista seuraavat asiat:
-   - "init.sql" sijaitsee samassa kansiossa kuin "db.py".
-   - "database.db"-tiedostoa ei tarvitse luoda itse. Sovellus suorittaa "init.sql"-tiedoston automaattisesti käynnistyessään ja luo kaikki tietokannan taulut.
-8. Tarkasta sovelluksen Python-koodi Pylintillä:
-   ```bash
-   pylint app.py config.py db.py meals.py users.py
-   ```
-9. Käynnistä sovellus:
+
+3. Start the application:
+
    ```bash
    python3 app.py
    ```
-10. Avaa selaimessa osoite http://127.0.0.1:5000
-11. Testaa sovellusta:
-   - Luo tili ja kirjaudu sisään.
-   - Testaa annosten lisäämistä, muokkaamista, poistamista, hakua ja profiilin hallintaa.
-12. Jos haluat aloittaa puhtaalla tietokannalla, pysäytä sovellus, poista "database.db" ja käynnistä sovellus uudelleen:
-    ```bash
-    rm database.db
-    python3 app.py
-    ```
 
+   On startup, the application reads `init.sql` and creates or initializes the SQLite database. The `init.sql` file must remain in the project directory alongside `db.py`.
+
+4. Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in a browser. Create an account to add and manage meals.
+
+## Running tests
+
+Run the test suite from the project directory:
+
+```bash
+python3 -m pytest
+```
+
+To check the Python source with Pylint:
+
+```bash
+pylint app.py config.py db.py meals.py users.py
+```

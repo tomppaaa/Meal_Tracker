@@ -12,7 +12,6 @@ app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
 
 db.ensure_meals_schema()
 
-ALL_MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snack", "Evening meal"]
 MAX_TEXT_INPUT_LENGTH = 10000
 MAX_SEARCH_QUERY_LENGTH = 1000
 MAX_MESSAGE_LENGTH = 1000
@@ -411,7 +410,7 @@ def index():
         "index.html",
         meals=meal_rows,
         all_diets=diets,
-        all_meal_types=ALL_MEAL_TYPES,
+        all_meal_types=db.get_meal_types(),
         selected_diets=selected_diets,
         selected_meal_types=selected_meal_types,
         query=search_query,
@@ -442,7 +441,7 @@ def result():
 @app.route("/meals/new")
 @app.route("/meal")
 def show_form():
-    return render_template("meal.html", diets=get_diets())
+    return render_template("meal.html", diets=get_diets(), meal_types=db.get_meal_types())
 
 
 @app.route("/meals/<int:meal_id>")
@@ -591,11 +590,12 @@ def edit_meal(meal_id):
                 meal=meal,
                 meal_name=name,
                 diets=get_diets(),
+                meal_types=db.get_meal_types(),
                 errors=[str(error)],
             )
         return redirect("/")
 
-    return render_template("edit_meal.html", meal=meal, diets=get_diets())
+    return render_template("edit_meal.html", meal=meal, diets=get_diets(), meal_types=db.get_meal_types())
 
 
 @app.route("/meals/<int:meal_id>/delete", methods=["POST"])
@@ -622,6 +622,7 @@ def add_meal():
             "meal.html",
             errors=["You must be logged in to add a meal."],
             diets=get_diets(),
+            meal_types=db.get_meal_types(),
         )
 
     name = request.form.get("name", "")
@@ -648,6 +649,7 @@ def add_meal():
             "meal.html",
             errors=errors,
             diets=get_diets(),
+            meal_types=db.get_meal_types(),
             meal_name=name,
             meal_type_value=meal_type,
             calories_value=calories,
@@ -675,6 +677,7 @@ def add_meal():
             "meal.html",
             errors=[str(error)],
             diets=get_diets(),
+            meal_types=db.get_meal_types(),
             meal_name=name,
             meal_type_value=meal_type,
             calories_value=calories,

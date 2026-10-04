@@ -81,6 +81,51 @@ def test_meal_type_search_filters_results(client):
             users.delete_user(user['id'])
 
 
+def test_diet_schema_initialization_preserves_existing_diets():
+    with app.app_context():
+        db.execute(
+            "INSERT OR REPLACE INTO diets (id, name) VALUES (?, ?)",
+            (99, 'Custom diet'),
+        )
+
+        db.ensure_meals_schema()
+
+        diets = {diet['id']: diet['name'] for diet in db.query("SELECT id, name FROM diets")}
+        assert diets[99] == 'Custom diet'
+        assert diets[1] == 'Keto'
+        assert diets[4] == 'High-protein'
+
+        db.execute("DELETE FROM diets WHERE id = ?", (99,))
+
+
+def test_meal_type_schema_initialization_preserves_existing_types(client):
+    with app.app_context():
+        db.execute(
+            "INSERT OR REPLACE INTO meal_types (id, name) VALUES (?, ?)",
+            (99, 'Brunch'),
+        )
+
+        db.ensure_meals_schema()
+
+        meal_types = {item['id']: item['name'] for item in db.get_meal_types()}
+        assert meal_types == {
+            1: 'Breakfast',
+            2: 'Lunch',
+            3: 'Dinner',
+            4: 'Snack',
+            5: 'Evening meal',
+            99: 'Brunch',
+        }
+        db.execute("DELETE FROM meal_types WHERE id = ?", (99,))
+
+    add_meal_response = client.get('/meal')
+    assert b'Breakfast' in add_meal_response.data
+    assert b'Evening meal' in add_meal_response.data
+
+    search_response = client.get('/')
+    assert b'name="meal_types" value="Breakfast"' in search_response.data
+
+
 def test_profile_meals_shows_statistics_by_type_and_diet(client):
     with app.app_context():
         username = 'profile-stats-user'

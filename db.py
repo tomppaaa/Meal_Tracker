@@ -84,6 +84,11 @@ def get_meal_comments(meal_id):
         (meal_id,),
     )
 
+
+def get_meal_types():
+    return query("SELECT id, name FROM meal_types ORDER BY id")
+
+
 def add_meal_comment(meal_id, author, body, parent_comment_id=None):
     author = (author or "").strip() or "Anonyymi"
     body = (body or "").strip()
