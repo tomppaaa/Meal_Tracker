@@ -589,12 +589,14 @@ def test_homepage_displays_current_meal_rating_summary(client):
         )
         db.save_meal_rating(rated_meal_id, voter_one_id, 3)
         db.save_meal_rating(rated_meal_id, voter_two_id, 5)
+        added_at = meals.get_meal_by_id(rated_meal_id)['created_at']
 
     response = client.get('/')
 
     assert response.status_code == 200
     assert b'Rating:</strong> 4.0/5 (2 ratings)' in response.data
     assert b'Rating:</strong> 0/5 (0 ratings)' in response.data
+    assert f'Added:</strong> {added_at}'.encode() in response.data
 
     with app.app_context():
         users.delete_user(owner_id)

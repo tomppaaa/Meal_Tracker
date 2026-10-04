@@ -85,6 +85,7 @@ def build_meal_search_query(search_query, min_price_value, max_price_value, sele
             m.carbs AS total_carbs,
             m.fat AS total_fat,
             m.price,
+            m.created_at,
             u.username,
             m.diet_tags,
             COALESCE(rating_summary.average_rating, 0) AS rating_average,

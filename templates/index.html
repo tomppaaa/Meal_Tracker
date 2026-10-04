@@ -59,6 +59,7 @@
             <article class="meal-card">
                 <h3><a href="/meal/{{ meal.id }}">{{ meal.name }}</a> ({{ meal.meal_type }})</h3>
                 <p>Author: <a href="/user/{{ meal.user_id }}">{{ meal.username }}</a></p>
+                <p><strong>Added:</strong> {{ meal.created_at }}</p>
                 <p><strong>Macros:</strong> {{ meal.total_calories or 0 }} kcal | P: {{ meal.total_protein or 0 }}g | C: {{ meal.total_carbs or 0 }}g | F: {{ meal.total_fat or 0 }}g</p>
                 <p><strong>Price:</strong> €{{ meal.price or 0.0 }}</p>
                 <p><strong>Rating:</strong> {{ meal.rating_average }}/5 ({{ meal.rating_count }} ratings)</p>
