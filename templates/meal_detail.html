@@ -55,7 +55,7 @@
                 <form action="/meal/{{ meal.id }}/comments" method="POST" class="comment-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <label for="comment">Add a comment:</label>
-                    <textarea id="comment" name="comment" rows="4" maxlength="1000" required>{{ comment_body or '' }}</textarea>
+                    <textarea id="comment" name="comment" rows="4" required>{{ comment_body or '' }}</textarea>
                     <button type="submit">Post comment</button>
                 </form>
             {% else %}
@@ -77,7 +77,7 @@
                                     <form action="/meal/{{ meal.id }}/comments/{{ comment.id }}/reply" method="POST" class="reply-form">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                         <label for="reply-{{ comment.id }}">Your reply</label>
-                                        <textarea id="reply-{{ comment.id }}" name="reply" rows="2" maxlength="1000">{% if reply_comment_id == comment.id %}{{ reply_body or '' }}{% endif %}</textarea>
+                                        <textarea id="reply-{{ comment.id }}" name="reply" rows="2">{% if reply_comment_id == comment.id %}{{ reply_body or '' }}{% endif %}</textarea>
                                         <button type="submit">Post reply</button>
                                     </form>
                                 </details>

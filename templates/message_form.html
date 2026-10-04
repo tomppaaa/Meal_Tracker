@@ -5,10 +5,20 @@
 {% block content %}
     <h2>Send message</h2>
 
+    {% if errors %}
+        <div class="form-error">
+            <ul>
+                {% for error in errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
     <form action="/result" method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label for="message">Message:</label><br>
-        <textarea id="message" name="message" rows="5" cols="40" required></textarea>
+        <textarea id="message" name="message" rows="5" cols="40" required>{{ message or '' }}</textarea>
 
         <br><br>
 

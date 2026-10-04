@@ -143,6 +143,103 @@ def test_meal_name_maximum_length_is_validated_before_insert(client):
         users.delete_user(user_id)
 
 
+def test_user_fields_reject_values_longer_than_their_limits():
+    with app.app_context():
+        with pytest.raises(ValueError, match='Username cannot be longer than 50 characters'):
+            users.create_user('u' * 51, 'secret123')
+
+        with pytest.raises(ValueError, match='Password cannot be longer than 128 characters'):
+            users.create_user('long-password-user', 'p' * 129)
+
+
+def test_create_and_update_meal_reject_long_meal_types():
+    with app.app_context():
+        username = 'long-meal-type-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+
+        with pytest.raises(ValueError, match='Meal type cannot be longer than 50 characters'):
+            meals.create_meal(user_id=user_id, name='Meal', meal_type='t' * 51)
+
+        meal_id = meals.create_meal(user_id=user_id, name='Meal', meal_type='Dinner')
+        with pytest.raises(ValueError, match='Meal type cannot be longer than 50 characters'):
+            meals.update_meal(meal_id, meal_type='t' * 51)
+
+        assert meals.get_meal_by_id(meal_id)['meal_type'] == 'Dinner'
+        users.delete_user(user_id)
+
+
+@pytest.mark.parametrize(
+    ('field', 'value', 'expected_error'),
+    [
+        ('calories', '-1', 'Calories must be a valid number greater than or equal to 0.'),
+        ('calories', '1.5', 'Calories must be a valid number greater than or equal to 0.'),
+        ('protein', '-0.1', 'Protein must be a valid number greater than or equal to 0.'),
+        ('carbs', 'not-a-number', 'Carbs must be a valid number greater than or equal to 0.'),
+        ('fat', '-2', 'Fat must be a valid number greater than or equal to 0.'),
+        ('price', 'NaN', 'Price must be a valid number greater than or equal to 0.'),
+        ('price', '-0.01', 'Price must be a valid number greater than or equal to 0.'),
+    ],
+)
+@pytest.mark.parametrize('route', ['add', 'edit'])
+def test_meal_routes_reject_invalid_numeric_values(client, field, value, expected_error, route):
+    with app.app_context():
+        username = 'invalid-meal-number-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+        meal_id = meals.create_meal(user_id=user_id, name='Existing meal', meal_type='Dinner')
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+
+    form_data = {'name': 'New meal', 'meal_type': 'Dinner', field: value}
+    path = '/add_meal' if route == 'add' else f'/meal/{meal_id}/edit'
+    response = client.post(path, data=csrf_data(client, form_data))
+
+    assert response.status_code == 200
+    assert expected_error.encode() in response.data
+
+    with app.app_context():
+        if route == 'add':
+            user_meals = meals.get_meals_by_user(user_id)
+            assert len(user_meals) == 1
+            assert user_meals[0]['name'] == 'Existing meal'
+        else:
+            assert meals.get_meal_by_id(meal_id)['name'] == 'Existing meal'
+        users.delete_user(user_id)
+
+
+def test_oversized_search_and_message_are_rejected(client):
+    search_response = client.get('/', query_string={'query': 'q' * 1001})
+    assert search_response.status_code == 400
+    assert b'Search query cannot be longer than 1000 characters.' in search_response.data
+
+    message_response = client.post(
+        '/result',
+        data=csrf_data(client, {'message': 'm' * 1001}),
+    )
+    assert message_response.status_code == 400
+    assert b'Message cannot be longer than 1000 characters.' in message_response.data
+    assert b'Message sent' not in message_response.data
+
+
+@pytest.mark.parametrize('query_key, value', [('min_price', '-1'), ('max_price', 'not-a-number')])
+def test_price_search_filters_reject_invalid_numbers(client, query_key, value):
+    response = client.get('/', query_string={query_key: value})
+    assert response.status_code == 400
+    assert b'Price filters must be valid numbers greater than or equal to 0.' in response.data
+
+
+def test_oversized_input_is_rejected_globally(client):
+    response = client.get('/', query_string={'unused': 'x' * 10001})
+    assert response.status_code == 400
+    assert b'Input values cannot be longer than 10000 characters.' in response.data
+
+
 def test_add_meal_route_rejects_name_longer_than_50_characters(client):
     with app.app_context():
         username = 'add-route-length-user'
@@ -164,6 +261,70 @@ def test_add_meal_route_rejects_name_longer_than_50_characters(client):
 
     with app.app_context():
         assert meals.get_meals_by_user(user_id) == []
+        users.delete_user(user_id)
+
+
+@pytest.mark.parametrize(
+    ('name', 'error'),
+    [
+        (' Meal name', 'Meal name cannot start with whitespace.'),
+        ('   ', 'Meal name is required.'),
+    ],
+)
+def test_add_meal_route_rejects_invalid_names(client, name, error):
+    with app.app_context():
+        username = 'add-route-invalid-name-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+
+    response = client.post(
+        '/add_meal',
+        data=csrf_data(client, {'name': name, 'meal_type': 'Dinner'}),
+    )
+
+    assert response.status_code == 200
+    assert error.encode() in response.data
+
+    with app.app_context():
+        assert meals.get_meals_by_user(user_id) == []
+        users.delete_user(user_id)
+
+
+@pytest.mark.parametrize(
+    ('name', 'error'),
+    [
+        (' Meal name', 'Meal name cannot start with whitespace.'),
+        ('   ', 'Meal name cannot be empty.'),
+    ],
+)
+def test_edit_meal_route_rejects_invalid_names(client, name, error):
+    with app.app_context():
+        username = 'edit-route-invalid-name-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+        meal_id = meals.create_meal(user_id=user_id, name='Valid meal', meal_type='Dinner')
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+
+    response = client.post(
+        f'/meal/{meal_id}/edit',
+        data=csrf_data(client, {'name': name, 'meal_type': 'Dinner'}),
+    )
+
+    assert response.status_code == 200
+    assert error.encode() in response.data
+    assert name.encode() in response.data
+
+    with app.app_context():
+        assert meals.get_meal_by_id(meal_id)['name'] == 'Valid meal'
         users.delete_user(user_id)
 
 

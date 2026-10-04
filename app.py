@@ -1,4 +1,5 @@
 import hmac
+import math
 import secrets
 
 from flask import Flask, request, redirect, session
@@ -7,10 +8,14 @@ import sqlite3, db, config, users, meals
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
 
 db.ensure_meals_schema()
 
 ALL_MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snack", "Evening meal"]
+MAX_TEXT_INPUT_LENGTH = 10000
+MAX_SEARCH_QUERY_LENGTH = 1000
+MAX_MESSAGE_LENGTH = 1000
 
 
 def get_csrf_token():
@@ -36,6 +41,18 @@ def protect_from_csrf():
     return None
 
 
+@app.before_request
+def limit_input_lengths():
+    for values in (request.args, request.form):
+        if any(
+            len(value) > MAX_TEXT_INPUT_LENGTH
+            for value_list in values.listvalues()
+            for value in value_list
+        ):
+            return "Input values cannot be longer than 10000 characters.", 400
+    return None
+
+
 def get_diets():
     return db.query("SELECT id, name FROM diets ORDER BY id")
 
@@ -44,9 +61,12 @@ def parse_price_filter(value):
     if not value:
         return None
     try:
-        return float(value)
-    except ValueError:
-        return None
+        price = float(value)
+    except ValueError as error:
+        raise ValueError("Price filters must be valid numbers greater than or equal to 0.") from error
+    if not math.isfinite(price) or price < 0:
+        raise ValueError("Price filters must be valid numbers greater than or equal to 0.")
+    return price
 
 
 def build_meal_search_query(search_query, min_price_value, max_price_value, selected_diets, selected_meal_types):
@@ -182,6 +202,8 @@ def create():
 
     if password1 != password2:
         errors.append("Passwords do not match.")
+    if len(password1) > users.MAX_PASSWORD_LENGTH:
+        errors.append("Password cannot be longer than 128 characters.")
 
     if errors:
         return render_form_with_errors("register.html", errors=errors, username=username)
@@ -208,6 +230,8 @@ def login():
                 "password": "Password cannot be empty.",
             },
         )
+        if len(password) > users.MAX_PASSWORD_LENGTH:
+            errors.append("Invalid username or password.")
 
         if errors:
             return render_form_with_errors("login.html", errors=errors, username=username)
@@ -289,6 +313,8 @@ def change_password():
         errors.append("Current password is incorrect.")
     if not new_password:
         errors.append("New password cannot be empty.")
+    elif len(new_password) > users.MAX_PASSWORD_LENGTH:
+        errors.append("Password cannot be longer than 128 characters.")
     if new_password != confirm_password:
         errors.append("New passwords do not match.")
 
@@ -318,6 +344,8 @@ def change_username():
         errors.append("Password is incorrect.")
     if not new_username:
         errors.append("Username cannot be empty.")
+    elif len(new_username) > users.MAX_USERNAME_LENGTH:
+        errors.append("Username cannot be longer than 50 characters.")
 
     if errors:
         context = build_profile_view(user_id, user)
@@ -357,13 +385,18 @@ def delete_account():
 @app.route("/")
 def index():
     search_query = request.args.get("query", "").strip()
+    if len(search_query) > MAX_SEARCH_QUERY_LENGTH:
+        return "Search query cannot be longer than 1000 characters.", 400
     min_price = request.args.get("min_price", "").strip()
     max_price = request.args.get("max_price", "").strip()
     selected_diets = request.args.getlist("diets")
     selected_meal_types = request.args.getlist("meal_types")
 
-    min_price_value = parse_price_filter(min_price)
-    max_price_value = parse_price_filter(max_price)
+    try:
+        min_price_value = parse_price_filter(min_price)
+        max_price_value = parse_price_filter(max_price)
+    except ValueError as error:
+        return str(error), 400
 
     sql, params = build_meal_search_query(
         search_query,
@@ -396,7 +429,13 @@ def form():
 @app.route("/messages/success", methods=["POST"])
 @app.route("/result", methods=["POST"])
 def result():
-    user_message = request.form["message"]
+    user_message = request.form.get("message", "")
+    if len(user_message) > MAX_MESSAGE_LENGTH:
+        return render_template(
+            "message_form.html",
+            errors=["Message cannot be longer than 1000 characters."],
+            message=user_message,
+        ), 400
     return render_template("message_success.html", message=user_message)
 
 
@@ -534,10 +573,11 @@ def edit_meal(meal_id):
         return "Unauthorized", 403
 
     if request.method == "POST":
+        name = request.form.get("name", "")
         try:
             meals.update_meal(
                 meal_id,
-                name=request.form["name"],
+                name=name,
                 meal_type=request.form["meal_type"],
                 calories=request.form.get("calories", 0),
                 protein=request.form.get("protein", 0),
@@ -546,7 +586,13 @@ def edit_meal(meal_id):
                 price=request.form.get("price", 0),
             )
         except ValueError as error:
-            return render_template("edit_meal.html", meal=meal, diets=get_diets(), errors=[str(error)])
+            return render_template(
+                "edit_meal.html",
+                meal=meal,
+                meal_name=name,
+                diets=get_diets(),
+                errors=[str(error)],
+            )
         return redirect("/")
 
     return render_template("edit_meal.html", meal=meal, diets=get_diets())
@@ -645,7 +691,3 @@ def add_meal():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-

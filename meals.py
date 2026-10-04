@@ -1,6 +1,37 @@
+import math
+
 import db
 
 MAX_MEAL_NAME_LENGTH = 50
+MAX_MEAL_TYPE_LENGTH = 50
+
+
+def _normalize_meal_name(name):
+    name = name or ""
+    if not name.strip():
+        raise ValueError("Meal name cannot be empty.")
+    if name[:1].isspace():
+        raise ValueError("Meal name cannot start with whitespace.")
+
+    name = name.strip()
+    if len(name) > MAX_MEAL_NAME_LENGTH:
+        raise ValueError("Meal name cannot be longer than 50 characters.")
+    return name
+
+
+def _validate_meal_number(field, value, integer=False):
+    label = field.capitalize()
+    if value in (None, ""):
+        value = 0
+
+    try:
+        number = int(value) if integer else float(value)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError(f"{label} must be a valid number greater than or equal to 0.") from error
+
+    if number < 0 or (not integer and not math.isfinite(number)):
+        raise ValueError(f"{label} must be a valid number greater than or equal to 0.")
+    return number
 
 
 def create_meal(
@@ -19,14 +50,18 @@ def create_meal(
     if not user_id:
         raise ValueError("User id is required.")
 
-    name = (name or "").strip()
+    name = _normalize_meal_name(name)
     meal_type = (meal_type or "").strip()
-    if not name:
-        raise ValueError("Meal name cannot be empty.")
-    if len(name) > MAX_MEAL_NAME_LENGTH:
-        raise ValueError("Meal name cannot be longer than 50 characters.")
     if not meal_type:
         raise ValueError("Meal type cannot be empty.")
+    if len(meal_type) > MAX_MEAL_TYPE_LENGTH:
+        raise ValueError("Meal type cannot be longer than 50 characters.")
+
+    calories = _validate_meal_number("calories", calories, integer=True)
+    protein = _validate_meal_number("protein", protein)
+    carbs = _validate_meal_number("carbs", carbs)
+    fat = _validate_meal_number("fat", fat)
+    price = _validate_meal_number("price", price)
 
     db.execute(
         """
@@ -38,11 +73,11 @@ def create_meal(
             user_id,
             name,
             meal_type,
-            int(calories or 0),
-            float(protein or 0.0),
-            float(carbs or 0.0),
-            float(fat or 0.0),
-            float(price or 0.0),
+            calories,
+            protein,
+            carbs,
+            fat,
+            price,
             recipe_notes,
             diet_tags,
         ),
@@ -91,14 +126,16 @@ def update_meal(meal_id, **fields):
     for key, value in fields.items():
         if key not in allowed_fields:
             continue
-        if key in {"name", "meal_type"}:
+        if key == "name":
+            value = _normalize_meal_name(value)
+        elif key == "meal_type":
             value = (value or "").strip()
-        if key == "name" and len(value) > MAX_MEAL_NAME_LENGTH:
-            raise ValueError("Meal name cannot be longer than 50 characters.")
-        if key in {"calories"}:
-            value = int(value or 0)
-        if key in {"protein", "carbs", "fat", "price"}:
-            value = float(value or 0.0)
+            if not value:
+                raise ValueError("Meal type cannot be empty.")
+            if len(value) > MAX_MEAL_TYPE_LENGTH:
+                raise ValueError("Meal type cannot be longer than 50 characters.")
+        if key in {"calories", "protein", "carbs", "fat", "price"}:
+            value = _validate_meal_number(key, value, integer=key == "calories")
         updates.append(f"{key} = ?")
         values.append(value)
 

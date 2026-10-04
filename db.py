@@ -2,6 +2,8 @@ import sqlite3
 from pathlib import Path
 from flask import g
 
+MAX_COMMENT_LENGTH = 1000
+
 
 def get_connection():
     con = sqlite3.connect("database.db")
@@ -87,7 +89,9 @@ def add_meal_comment(meal_id, author, body, parent_comment_id=None):
     body = (body or "").strip()
 
     if not body:
-        raise ValueError("Kommentti ei voi olla tyhjä.")
+        raise ValueError("Comment cannot be empty.")
+    if len(body) > MAX_COMMENT_LENGTH:
+        raise ValueError("Comment cannot be longer than 1000 characters.")
 
     execute(
         "INSERT INTO meal_comments (meal_id, author, body, parent_comment_id) VALUES (?, ?, ?, ?)",
