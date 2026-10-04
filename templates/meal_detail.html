@@ -65,7 +65,7 @@
             {% if comments %}
                 <div class="comments-list">
                     {% for comment in comments %}
-                        <article class="comment">
+                        <article class="comment" id="comment-{{ comment.id }}">
                             <p class="comment-meta"><strong>{{ comment.author }}</strong> · {{ comment.created_at }}</p>
                             <p>{{ comment.body }}</p>
                             {% if session.get('user_id') == meal.user_id %}
@@ -83,7 +83,7 @@
                                 </details>
                             {% endif %}
                             {% for reply in comments if reply.parent_comment_id == comment.id %}
-                                <article class="comment-reply">
+                                <article class="comment-reply" id="comment-{{ reply.id }}">
                                     <p class="comment-meta"><strong>{{ reply.author }}</strong> · {{ reply.created_at }}</p>
                                     <p>{{ reply.body }}</p>
                                 </article>

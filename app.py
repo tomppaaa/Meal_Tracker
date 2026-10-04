@@ -25,7 +25,12 @@ def get_csrf_token():
 
 @app.context_processor
 def inject_csrf_token():
-    return {"csrf_token": get_csrf_token()}
+    user_id = session.get("user_id")
+    unread_notifications = db.get_unread_notification_count(user_id) if user_id else 0
+    return {
+        "csrf_token": get_csrf_token(),
+        "unread_notification_count": unread_notifications,
+    }
 
 
 @app.before_request
@@ -81,9 +86,16 @@ def build_meal_search_query(search_query, min_price_value, max_price_value, sele
             m.fat AS total_fat,
             m.price,
             u.username,
-            m.diet_tags
+            m.diet_tags,
+            COALESCE(rating_summary.average_rating, 0) AS rating_average,
+            COALESCE(rating_summary.rating_count, 0) AS rating_count
         FROM meals m
         LEFT JOIN users u ON u.id = m.user_id
+        LEFT JOIN (
+            SELECT meal_id, ROUND(AVG(rating), 1) AS average_rating, COUNT(*) AS rating_count
+            FROM meal_ratings
+            GROUP BY meal_id
+        ) rating_summary ON rating_summary.meal_id = m.id
     """
     params = []
     conditions = []
@@ -281,6 +293,32 @@ def profile_meals():
         return redirect("/login")
 
     return render_template("profile_meals.html", user=user, statistics=build_meal_statistics(user_id))
+
+
+@app.route("/notifications")
+@app.route("/messages")
+def messages():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+    return render_template("messages.html", notifications=db.get_notifications(user_id))
+
+
+@app.route("/notifications/<int:notification_id>/open")
+@app.route("/messages/<int:notification_id>/open")
+def open_notification(notification_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+
+    notification = db.get_notification_target(notification_id, user_id)
+    if not notification:
+        return "Notification not found", 404
+
+    db.mark_notification_read(notification_id, user_id)
+    return redirect(
+        f"/meal/{notification['meal_id']}#comment-{notification['comment_id']}"
+    )
 
 
 @app.route("/user/<int:user_id>")
@@ -489,7 +527,19 @@ def add_meal_comment(meal_id):
             diets=get_diets(),
         )
 
-    db.add_meal_comment(meal_id, session.get("user_name"), comment_body)
+    comment_id = db.add_meal_comment(
+        meal_id,
+        session.get("user_name"),
+        comment_body,
+        commenter_user_id=session["user_id"],
+    )
+    db.create_notification(
+        meal["user_id"],
+        session["user_id"],
+        meal_id,
+        comment_id,
+        "new_comment",
+    )
     return redirect(f"/meal/{meal_id}")
 
 
@@ -507,11 +557,12 @@ def reply_to_meal_comment(meal_id, comment_id):
         return "Unauthorized", 403
 
     parent_comments = db.query(
-        "SELECT id FROM meal_comments WHERE id = ? AND meal_id = ?",
+        "SELECT id, commenter_user_id FROM meal_comments WHERE id = ? AND meal_id = ?",
         (comment_id, meal_id),
     )
     if not parent_comments:
         return "Comment not found", 404
+    parent_comment = parent_comments[0]
 
     reply_body = request.form.get("reply", "").strip()
     if not reply_body or len(reply_body) > 1000:
@@ -529,7 +580,21 @@ def reply_to_meal_comment(meal_id, comment_id):
             diets=get_diets(),
         )
 
-    db.add_meal_comment(meal_id, session.get("user_name"), reply_body, comment_id)
+    reply_id = db.add_meal_comment(
+        meal_id,
+        session.get("user_name"),
+        reply_body,
+        comment_id,
+        session["user_id"],
+    )
+    if parent_comment["commenter_user_id"] is not None:
+        db.create_notification(
+            parent_comment["commenter_user_id"],
+            session["user_id"],
+            meal_id,
+            reply_id,
+            "comment_reply",
+        )
     return redirect(f"/meal/{meal_id}")
 
 

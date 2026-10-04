@@ -115,6 +115,21 @@ nav a:hover,
     box-sizing: border-box;
 }
 
+.notifications-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.notification {
+    border-bottom: 1px solid #e5e7eb;
+    padding: 0.75rem;
+}
+
+.notification.is-unread {
+    border-left: 3px solid #2563eb;
+    background: #eff6ff;
+}
+
 .stats-overview,
 .stats-group {
     display: grid;
@@ -496,4 +511,3 @@ input[type="checkbox"] {
     margin: 0;
     padding-left: 1.2rem;
 }
-

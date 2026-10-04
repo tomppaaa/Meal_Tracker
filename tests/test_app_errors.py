@@ -451,6 +451,89 @@ def test_only_meal_owner_can_reply_to_comments(client):
         users.delete_user(commenter_id)
 
 
+def test_opening_comment_and_reply_messages_marks_them_read(client):
+    with app.app_context():
+        owner_name = 'notification-owner-user'
+        commenter_name = 'notification-commenter-user'
+        for username in (owner_name, commenter_name):
+            old_user = users.get_user_by_username(username)
+            if old_user:
+                users.delete_user(old_user['id'])
+        owner_id = users.create_user(owner_name, 'secret123')
+        commenter_id = users.create_user(commenter_name, 'secret123')
+        meal_id = meals.create_meal(user_id=owner_id, name='Notification meal', meal_type='Lunch')
+
+    with client.session_transaction() as session:
+        session['user_id'] = commenter_id
+        session['user_name'] = commenter_name
+
+    comment_response = client.post(
+        f'/meal/{meal_id}/comments',
+        data=csrf_data(client, {'comment': 'A new comment'}),
+    )
+    assert comment_response.status_code == 302
+
+    with app.app_context():
+        notifications = db.get_notifications(owner_id)
+        assert len(notifications) == 1
+        assert notifications[0]['notification_type'] == 'new_comment'
+        assert notifications[0]['is_read'] == 0
+        comment_id = notifications[0]['comment_id']
+
+    unauthorized_open_response = client.get(
+        f"/messages/{notifications[0]['id']}/open",
+    )
+    assert unauthorized_open_response.status_code == 404
+    with app.app_context():
+        assert db.get_unread_notification_count(owner_id) == 1
+
+    with client.session_transaction() as session:
+        session['user_id'] = owner_id
+        session['user_name'] = owner_name
+
+    inbox_response = client.get('/messages')
+    assert inbox_response.status_code == 200
+    assert b'notification-commenter-user' in inbox_response.data
+    assert b'Messages (1)' in inbox_response.data
+    assert b'Mark as read' not in inbox_response.data
+
+    open_response = client.get(f"/messages/{notifications[0]['id']}/open")
+    assert open_response.status_code == 302
+    assert open_response.headers['Location'].endswith(f'/meal/{meal_id}#comment-{comment_id}')
+    with app.app_context():
+        assert db.get_unread_notification_count(owner_id) == 0
+
+    reply_response = client.post(
+        f'/meal/{meal_id}/comments/{comment_id}/reply',
+        data=csrf_data(client, {'reply': 'A reply to your comment'}),
+    )
+    assert reply_response.status_code == 302
+
+    with client.session_transaction() as session:
+        session['user_id'] = commenter_id
+        session['user_name'] = commenter_name
+
+    reply_inbox_response = client.get('/messages')
+    assert reply_inbox_response.status_code == 200
+    assert b'replied to your comment' in reply_inbox_response.data
+    assert b'Messages (1)' in reply_inbox_response.data
+    with app.app_context():
+        reply_notifications = db.get_notifications(commenter_id)
+        assert len(reply_notifications) == 1
+        assert reply_notifications[0]['notification_type'] == 'comment_reply'
+        assert reply_notifications[0]['is_read'] == 0
+
+    open_reply_response = client.get(f"/messages/{reply_notifications[0]['id']}/open")
+    assert open_reply_response.status_code == 302
+    assert open_reply_response.headers['Location'].endswith(
+        f"/meal/{meal_id}#comment-{reply_notifications[0]['comment_id']}"
+    )
+    with app.app_context():
+        assert db.get_unread_notification_count(commenter_id) == 0
+        users.delete_user(owner_id)
+        users.delete_user(commenter_id)
+
+
 def test_meal_rating_can_be_saved_and_updated(client):
     with app.app_context():
         username = 'meal-rating-user'
@@ -481,3 +564,39 @@ def test_meal_rating_can_be_saved_and_updated(client):
         assert rating['count'] == 1
         assert rating['user_rating'] == 5
         users.delete_user(user_id)
+
+
+def test_homepage_displays_current_meal_rating_summary(client):
+    with app.app_context():
+        usernames = ('homepage-rating-owner', 'homepage-rating-voter-one', 'homepage-rating-voter-two')
+        for username in usernames:
+            old_user = users.get_user_by_username(username)
+            if old_user:
+                users.delete_user(old_user['id'])
+
+        owner_id = users.create_user(usernames[0], 'secret123')
+        voter_one_id = users.create_user(usernames[1], 'secret123')
+        voter_two_id = users.create_user(usernames[2], 'secret123')
+        rated_meal_id = meals.create_meal(
+            user_id=owner_id,
+            name='Homepage rated meal',
+            meal_type='Dinner',
+        )
+        unrated_meal_id = meals.create_meal(
+            user_id=owner_id,
+            name='Homepage unrated meal',
+            meal_type='Lunch',
+        )
+        db.save_meal_rating(rated_meal_id, voter_one_id, 3)
+        db.save_meal_rating(rated_meal_id, voter_two_id, 5)
+
+    response = client.get('/')
+
+    assert response.status_code == 200
+    assert b'Rating:</strong> 4.0/5 (2 ratings)' in response.data
+    assert b'Rating:</strong> 0/5 (0 ratings)' in response.data
+
+    with app.app_context():
+        users.delete_user(owner_id)
+        users.delete_user(voter_one_id)
+        users.delete_user(voter_two_id)

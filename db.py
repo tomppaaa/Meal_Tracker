@@ -34,6 +34,7 @@ def ensure_meals_schema():
             author TEXT NOT NULL,
             body TEXT NOT NULL CHECK(length(trim(body)) > 0),
             parent_comment_id INTEGER REFERENCES meal_comments(id) ON DELETE CASCADE,
+            commenter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -41,6 +42,15 @@ def ensure_meals_schema():
     existing_comment_columns = {row[1] for row in comment_columns}
     if "parent_comment_id" not in existing_comment_columns:
         con.execute("ALTER TABLE meal_comments ADD COLUMN parent_comment_id INTEGER REFERENCES meal_comments(id) ON DELETE CASCADE")
+    if "commenter_user_id" not in existing_comment_columns:
+        con.execute("ALTER TABLE meal_comments ADD COLUMN commenter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL")
+        con.execute("""
+            UPDATE meal_comments
+            SET commenter_user_id = (
+                SELECT users.id FROM users WHERE users.username = meal_comments.author
+            )
+            WHERE commenter_user_id IS NULL
+        """)
     con.execute("""
         CREATE TABLE IF NOT EXISTS meal_ratings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +59,18 @@ def ensure_meals_schema():
             rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(meal_id, user_id)
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+            comment_id INTEGER NOT NULL REFERENCES meal_comments(id) ON DELETE CASCADE,
+            notification_type TEXT NOT NULL CHECK(notification_type IN ('new_comment', 'comment_reply')),
+            is_read INTEGER NOT NULL DEFAULT 0 CHECK(is_read IN (0, 1)),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
     con.commit()
@@ -76,7 +98,7 @@ def query(sql, params=[]):
 def get_meal_comments(meal_id):
     return query(
         """
-        SELECT id, meal_id, author, body, parent_comment_id, created_at
+        SELECT id, meal_id, author, body, parent_comment_id, commenter_user_id, created_at
         FROM meal_comments
         WHERE meal_id = ?
         ORDER BY created_at DESC, id DESC
@@ -89,7 +111,7 @@ def get_meal_types():
     return query("SELECT id, name FROM meal_types ORDER BY id")
 
 
-def add_meal_comment(meal_id, author, body, parent_comment_id=None):
+def add_meal_comment(meal_id, author, body, parent_comment_id=None, commenter_user_id=None):
     author = (author or "").strip() or "Anonyymi"
     body = (body or "").strip()
 
@@ -99,10 +121,70 @@ def add_meal_comment(meal_id, author, body, parent_comment_id=None):
         raise ValueError("Comment cannot be longer than 1000 characters.")
 
     execute(
-        "INSERT INTO meal_comments (meal_id, author, body, parent_comment_id) VALUES (?, ?, ?, ?)",
-        (meal_id, author, body, parent_comment_id),
+        """
+        INSERT INTO meal_comments (meal_id, author, body, parent_comment_id, commenter_user_id)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (meal_id, author, body, parent_comment_id, commenter_user_id),
     )
     return last_insert_id()
+
+
+def create_notification(user_id, actor_user_id, meal_id, comment_id, notification_type):
+    if user_id == actor_user_id:
+        return
+    if notification_type not in {"new_comment", "comment_reply"}:
+        raise ValueError("Invalid notification type.")
+    execute(
+        """
+        INSERT INTO notifications (user_id, actor_user_id, meal_id, comment_id, notification_type)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (user_id, actor_user_id, meal_id, comment_id, notification_type),
+    )
+
+
+def get_notifications(user_id):
+    return query(
+        """
+        SELECT n.id, n.user_id, n.actor_user_id, n.meal_id, n.comment_id,
+               n.notification_type, n.is_read, n.created_at, m.name AS meal_name,
+               actor.username AS actor_username
+        FROM notifications n
+        JOIN meals m ON m.id = n.meal_id
+        LEFT JOIN users actor ON actor.id = n.actor_user_id
+        WHERE n.user_id = ?
+        ORDER BY n.created_at DESC, n.id DESC
+        """,
+        (user_id,),
+    )
+
+
+def get_unread_notification_count(user_id):
+    rows = query(
+        "SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = 0",
+        (user_id,),
+    )
+    return rows[0]["count"]
+
+
+def get_notification_target(notification_id, user_id):
+    rows = query(
+        """
+        SELECT meal_id, comment_id
+        FROM notifications
+        WHERE id = ? AND user_id = ?
+        """,
+        (notification_id, user_id),
+    )
+    return row_to_dict(rows[0]) if rows else None
+
+
+def mark_notification_read(notification_id, user_id):
+    execute(
+        "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
+        (notification_id, user_id),
+    )
 
 
 def get_meal_rating_summary(meal_id, user_id=None):

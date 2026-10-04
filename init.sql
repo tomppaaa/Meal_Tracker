@@ -46,6 +46,27 @@ CREATE TABLE IF NOT EXISTS meals (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS meal_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+    author TEXT NOT NULL,
+    body TEXT NOT NULL CHECK(length(trim(body)) > 0),
+    parent_comment_id INTEGER REFERENCES meal_comments(id) ON DELETE CASCADE,
+    commenter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+    comment_id INTEGER NOT NULL REFERENCES meal_comments(id) ON DELETE CASCADE,
+    notification_type TEXT NOT NULL CHECK(notification_type IN ('new_comment', 'comment_reply')),
+    is_read INTEGER NOT NULL DEFAULT 0 CHECK(is_read IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     meal_id INTEGER NOT NULL,

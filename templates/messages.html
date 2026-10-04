@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+
+{% block title %}Messages{% endblock %}
+
+{% block content %}
+    <section class="meal-card">
+        <h2>Messages</h2>
+        {% if notifications %}
+            <div class="notifications-list">
+                {% for notification in notifications %}
+                    <article class="notification{% if not notification.is_read %} is-unread{% endif %}">
+                        <p>
+                            {% if notification.notification_type == 'new_comment' %}
+                                <strong>{{ notification.actor_username or 'A user' }}</strong> commented on your meal
+                            {% else %}
+                                <strong>{{ notification.actor_username or 'The meal owner' }}</strong> replied to your comment
+                            {% endif %}
+                            <a href="/messages/{{ notification.id }}/open">{{ notification.meal_name }}</a>.
+                        </p>
+                        <p class="comment-meta">{{ notification.created_at }}</p>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p>You have no messages.</p>
+        {% endif %}
+    </section>
+{% endblock %}
