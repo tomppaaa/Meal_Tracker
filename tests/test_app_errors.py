@@ -56,6 +56,8 @@ def test_csrf_token_is_required_and_rotated_after_login(client):
         data={'username': username, 'password': 'secret123'},
     )
     assert missing_token_response.status_code == 403
+    assert b'403 - Forbidden' in missing_token_response.data
+    assert b'Invalid CSRF token.' in missing_token_response.data
 
     with client.session_transaction() as session:
         old_token = session['csrf_token']
@@ -126,7 +128,7 @@ def test_meal_type_schema_initialization_preserves_existing_types(client):
     assert b'name="meal_types" value="Breakfast"' in search_response.data
 
 
-def test_profile_meals_shows_statistics_by_type_and_diet(client):
+def test_profile_shows_statistics_by_type_and_diet_and_legacy_stats_url_redirects(client):
     with app.app_context():
         username = 'profile-stats-user'
         old_user = users.get_user_by_username(username)
@@ -140,7 +142,7 @@ def test_profile_meals_shows_statistics_by_type_and_diet(client):
         session['user_id'] = user_id
         session['user_name'] = username
 
-    response = client.get('/profile/meals')
+    response = client.get('/profile')
 
     assert response.status_code == 200
     assert b"By meal type" in response.data
@@ -148,6 +150,10 @@ def test_profile_meals_shows_statistics_by_type_and_diet(client):
     assert b"Breakfast" in response.data
     assert b"Vegan" in response.data
     assert b"2" in response.data
+
+    legacy_response = client.get('/profile/meals')
+    assert legacy_response.status_code == 302
+    assert legacy_response.headers['Location'].endswith('/profile')
 
     with app.app_context():
         users.delete_user(user_id)
@@ -182,6 +188,7 @@ def test_profile_shows_overview_and_links_to_separate_account_settings(client):
 
     profile_response = client.get('/profile')
     assert profile_response.status_code == 200
+    assert b'href="/meal">Add a meal</a>' in profile_response.data
     assert b'Account settings' in profile_response.data
     assert b'Change username' not in profile_response.data
     assert b'Change password' not in profile_response.data
@@ -222,6 +229,47 @@ def test_profile_shows_overview_and_links_to_separate_account_settings(client):
 
     with app.app_context():
         users.delete_user(user_id)
+
+
+def test_profile_lists_only_the_signed_in_users_meals(client):
+    with app.app_context():
+        username = 'profile-own-meals-user'
+        other_username = 'profile-other-meals-user'
+        for existing_username in (username, other_username):
+            old_user = users.get_user_by_username(existing_username)
+            if old_user:
+                users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+        other_user_id = users.create_user(other_username, 'secret123')
+        own_meal_id = meals.create_meal(
+            user_id=user_id,
+            name='My profile meal',
+            meal_type='Lunch',
+            calories=450,
+            price=6.5,
+        )
+        other_meal_id = meals.create_meal(
+            user_id=other_user_id,
+            name='Someone elses meal',
+            meal_type='Dinner',
+        )
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+        session['user_name'] = username
+
+    response = client.get('/profile')
+
+    assert response.status_code == 200
+    assert b'Your meals' in response.data
+    assert b'My profile meal' in response.data
+    assert f'/meal/{own_meal_id}'.encode() in response.data
+    assert b'Someone elses meal' not in response.data
+    assert f'/meal/{other_meal_id}'.encode() not in response.data
+
+    with app.app_context():
+        users.delete_user(user_id)
+        users.delete_user(other_user_id)
 
 
 def test_meal_name_maximum_length_is_validated_before_insert(client):
@@ -338,7 +386,56 @@ def test_price_search_filters_reject_invalid_numbers(client, query_key, value):
 def test_oversized_input_is_rejected_globally(client):
     response = client.get('/', query_string={'unused': 'x' * 10001})
     assert response.status_code == 400
+    assert b'400 - Bad Request' in response.data
     assert b'Input values cannot be longer than 10000 characters.' in response.data
+
+
+def test_http_errors_use_common_error_page(client):
+    not_found_response = client.get('/meal/99999999')
+    assert not_found_response.status_code == 404
+    assert b'404 - Not Found' in not_found_response.data
+    assert b'Meal not found.' in not_found_response.data
+
+    method_not_allowed_response = client.post('/', data=csrf_data(client, {}))
+    assert method_not_allowed_response.status_code == 405
+    assert b'405 - Method Not Allowed' in method_not_allowed_response.data
+
+    oversized_request_response = client.post(
+        '/result',
+        data={'message': 'm' * (64 * 1024 + 1)},
+        content_type='application/x-www-form-urlencoded',
+    )
+    assert oversized_request_response.status_code == 413
+    assert b'413 - Request Entity Too Large' in oversized_request_response.data
+
+
+def test_internal_server_error_page_does_not_expose_exception(client, monkeypatch):
+    with app.app_context():
+        username = 'internal-error-handler-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+        session['user_name'] = username
+
+    def raise_database_error(_user_id):
+        raise RuntimeError('private database details')
+
+    monkeypatch.setattr(meals, 'get_meals_by_user', raise_database_error)
+    monkeypatch.setitem(app.config, 'PROPAGATE_EXCEPTIONS', False)
+
+    response = client.get('/profile')
+
+    assert response.status_code == 500
+    assert b'500 - Internal Server Error' in response.data
+    assert b'Please try again later.' in response.data
+    assert b'private database details' not in response.data
+
+    with app.app_context():
+        users.delete_user(user_id)
 
 
 def test_add_meal_route_rejects_name_longer_than_50_characters(client):

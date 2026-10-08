@@ -1,0 +1,11 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ status_code }} - {{ title }}{% endblock %}
+
+{% block content %}
+    <section class="meal-card">
+        <h2>{{ status_code }} - {{ title }}</h2>
+        <p>{{ message }}</p>
+        <p><a href="/" class="action-link">Return to home</a></p>
+    </section>
+{% endblock %}

@@ -20,7 +20,66 @@
         <p><strong>Meals added:</strong> {{ meal_count }}</p>
         <p><strong>Total calories:</strong> {{ total_calories }} kcal</p>
         <p><strong>Total price:</strong> €{{ total_price }}</p>
-        <p><a href="/profile/meals" class="action-link">View detailed meal statistics</a></p>
         <p><a href="/profile/settings" class="action-link">Account settings</a></p>
+    </section>
+
+    <section class="meal-card">
+        <h2>Meal statistics</h2>
+        <div class="stats-overview">
+            <div class="stat-item"><strong>Meals</strong><span>{{ statistics.overall.count }}</span></div>
+            <div class="stat-item"><strong>Total calories</strong><span>{{ statistics.overall.calories }} kcal</span></div>
+            <div class="stat-item"><strong>Average calories</strong><span>{{ '%.1f'|format(statistics.overall.average_calories) }} kcal</span></div>
+            <div class="stat-item"><strong>Protein</strong><span>{{ '%.1f'|format(statistics.overall.protein) }} g</span></div>
+            <div class="stat-item"><strong>Carbohydrates</strong><span>{{ '%.1f'|format(statistics.overall.carbs) }} g</span></div>
+            <div class="stat-item"><strong>Fat</strong><span>{{ '%.1f'|format(statistics.overall.fat) }} g</span></div>
+            <div class="stat-item"><strong>Total price</strong><span>€{{ '%.2f'|format(statistics.overall.price) }}</span></div>
+        </div>
+    </section>
+
+    <section class="stats-group">
+        <article class="meal-card">
+            <h2>By meal type</h2>
+            {% if statistics.by_type %}
+                <table class="stats-table">
+                    <thead><tr><th>Type</th><th>Meals</th><th>Calories</th><th>Average</th><th>Price</th></tr></thead>
+                    <tbody>
+                        {% for name, stats in statistics.by_type %}
+                            <tr><td>{{ name }}</td><td>{{ stats.count }}</td><td>{{ stats.calories }} kcal</td><td>{{ '%.1f'|format(stats.average_calories) }} kcal</td><td>€{{ '%.2f'|format(stats.price) }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No meal data yet.</p>
+            {% endif %}
+        </article>
+
+        <article class="meal-card">
+            <h2>By diet</h2>
+            {% if statistics.by_diet %}
+                <table class="stats-table">
+                    <thead><tr><th>Diet</th><th>Meals</th><th>Calories</th><th>Average</th><th>Price</th></tr></thead>
+                    <tbody>
+                        {% for name, stats in statistics.by_diet %}
+                            <tr><td>{{ name }}</td><td>{{ stats.count }}</td><td>{{ stats.calories }} kcal</td><td>{{ '%.1f'|format(stats.average_calories) }} kcal</td><td>€{{ '%.2f'|format(stats.price) }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No diet categories assigned yet.</p>
+            {% endif %}
+        </article>
+    </section>
+
+    <section>
+        <h2>Your meals</h2>
+        {% for meal in user_meals %}
+            <article class="meal-card">
+                <h3><a href="/meal/{{ meal.id }}">{{ meal.name }}</a> ({{ meal.meal_type }})</h3>
+                <p><strong>Macros:</strong> {{ meal.calories or 0 }} kcal | P: {{ meal.protein or 0 }}g | C: {{ meal.carbs or 0 }}g | F: {{ meal.fat or 0 }}g</p>
+                <p><strong>Price:</strong> €{{ meal.price or 0.0 }}</p>
+            </article>
+        {% else %}
+            <p>You have not added any meals yet.</p>
+        {% endfor %}
     </section>
 {% endblock %}

@@ -2,9 +2,9 @@ import hmac
 import math
 import secrets
 
-from flask import Flask, request, redirect, session
-from flask import render_template
+from flask import Flask, abort, request, redirect, session, render_template
 import sqlite3, db, config, users, meals
+from werkzeug.exceptions import HTTPException
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
@@ -15,6 +15,26 @@ db.ensure_meals_schema()
 MAX_TEXT_INPUT_LENGTH = 10000
 MAX_SEARCH_QUERY_LENGTH = 1000
 MAX_MESSAGE_LENGTH = 1000
+
+
+@app.errorhandler(HTTPException)
+def handle_http_error(error):
+    return render_template(
+        "error.html",
+        status_code=error.code,
+        title=error.name,
+        message=error.description,
+    ), error.code
+
+
+@app.errorhandler(500)
+def handle_internal_error(_error):
+    return render_template(
+        "error.html",
+        status_code=500,
+        title="Internal Server Error",
+        message="An unexpected error occurred. Please try again later.",
+    ), 500
 
 
 def get_csrf_token():
@@ -41,7 +61,7 @@ def protect_from_csrf():
     submitted_token = request.form.get("csrf_token", "")
     session_token = session.get("csrf_token", "")
     if not session_token or not submitted_token or not hmac.compare_digest(submitted_token, session_token):
-        return "Invalid CSRF token", 403
+        abort(403, description="Invalid CSRF token.")
     return None
 
 
@@ -53,7 +73,7 @@ def limit_input_lengths():
             for value_list in values.listvalues()
             for value in value_list
         ):
-            return "Input values cannot be longer than 10000 characters.", 400
+            abort(400, description="Input values cannot be longer than 10000 characters.")
     return None
 
 
@@ -152,14 +172,13 @@ def validate_required_fields(payload, rules):
 
 def build_profile_view(user_id, user=None):
     user = user or users.get_user_by_id(user_id)
-    meal_count = len(meals.get_meals_by_user(user_id))
-    total_calories = sum((meal.get("calories") or 0) for meal in meals.get_meals_by_user(user_id))
-    total_price = sum((meal.get("price") or 0) for meal in meals.get_meals_by_user(user_id))
+    user_meals = meals.get_meals_by_user(user_id)
     return {
         "user": user,
-        "meal_count": meal_count,
-        "total_calories": total_calories,
-        "total_price": total_price,
+        "user_meals": user_meals,
+        "meal_count": len(user_meals),
+        "total_calories": sum((meal.get("calories") or 0) for meal in user_meals),
+        "total_price": sum((meal.get("price") or 0) for meal in user_meals),
     }
 
 
@@ -278,6 +297,7 @@ def profile():
         return redirect("/login")
 
     context = build_profile_view(user_id, user)
+    context["statistics"] = build_meal_statistics(user_id)
     return render_form_with_errors("profile.html", errors=[], **context)
 
 
@@ -302,13 +322,12 @@ def profile_meals():
     if not user_id:
         return redirect("/login")
 
-    user = users.get_user_by_id(user_id)
-    if not user:
+    if not users.get_user_by_id(user_id):
         session.pop("user_id", None)
         session.pop("user_name", None)
         return redirect("/login")
 
-    return render_template("profile_meals.html", user=user, statistics=build_meal_statistics(user_id))
+    return redirect("/profile")
 
 
 @app.route("/notifications")
@@ -329,7 +348,7 @@ def open_notification(notification_id):
 
     notification = db.get_notification_target(notification_id, user_id)
     if not notification:
-        return "Notification not found", 404
+        abort(404, description="Notification not found.")
 
     db.mark_notification_read(notification_id, user_id)
     return redirect(
@@ -341,7 +360,7 @@ def open_notification(notification_id):
 def user_meals(user_id):
     user = users.get_user_by_id(user_id)
     if not user:
-        return "User not found", 404
+        abort(404, description="User not found.")
 
     user_meals = meals.get_meals_by_user(user_id)
     return render_template("user_meals.html", user=user, meals=user_meals)
@@ -439,7 +458,7 @@ def delete_account():
 def index():
     search_query = request.args.get("query", "").strip()
     if len(search_query) > MAX_SEARCH_QUERY_LENGTH:
-        return "Search query cannot be longer than 1000 characters.", 400
+        abort(400, description="Search query cannot be longer than 1000 characters.")
     min_price = request.args.get("min_price", "").strip()
     max_price = request.args.get("max_price", "").strip()
     selected_diets = request.args.getlist("diets")
@@ -449,7 +468,7 @@ def index():
         min_price_value = parse_price_filter(min_price)
         max_price_value = parse_price_filter(max_price)
     except ValueError as error:
-        return str(error), 400
+        abort(400, description=str(error))
 
     sql, params = build_meal_search_query(
         search_query,
@@ -484,11 +503,7 @@ def form():
 def result():
     user_message = request.form.get("message", "")
     if len(user_message) > MAX_MESSAGE_LENGTH:
-        return render_template(
-            "message_form.html",
-            errors=["Message cannot be longer than 1000 characters."],
-            message=user_message,
-        ), 400
+        abort(400, description="Message cannot be longer than 1000 characters.")
     return render_template("message_success.html", message=user_message)
 
 
@@ -503,7 +518,7 @@ def show_form():
 def meal_detail(meal_id):
     meal = meals.get_meal_by_id(meal_id)
     if not meal:
-        return "Meal not found", 404
+        abort(404, description="Meal not found.")
     comments = db.get_meal_comments(meal_id)
     ratings = db.get_meal_rating_summary(meal_id, session.get("user_id"))
     return render_template("meal_detail.html", meal=meal, comments=comments, comment_error=None, ratings=ratings, rating_error=None, diets=get_diets())
@@ -514,7 +529,7 @@ def meal_detail(meal_id):
 def add_meal_comment(meal_id):
     meal = meals.get_meal_by_id(meal_id)
     if not meal:
-        return "Meal not found", 404
+        abort(404, description="Meal not found.")
 
     if not session.get("user_id"):
         return redirect("/login")
@@ -564,20 +579,20 @@ def add_meal_comment(meal_id):
 def reply_to_meal_comment(meal_id, comment_id):
     meal = meals.get_meal_by_id(meal_id)
     if not meal:
-        return "Meal not found", 404
+        abort(404, description="Meal not found.")
 
     user_id = session.get("user_id")
     if not user_id:
         return redirect("/login")
     if user_id != meal["user_id"]:
-        return "Unauthorized", 403
+        abort(403, description="You are not allowed to reply to this comment.")
 
     parent_comments = db.query(
         "SELECT id, commenter_user_id FROM meal_comments WHERE id = ? AND meal_id = ?",
         (comment_id, meal_id),
     )
     if not parent_comments:
-        return "Comment not found", 404
+        abort(404, description="Comment not found.")
     parent_comment = parent_comments[0]
 
     reply_body = request.form.get("reply", "").strip()
@@ -619,7 +634,7 @@ def reply_to_meal_comment(meal_id, comment_id):
 def rate_meal(meal_id):
     meal = meals.get_meal_by_id(meal_id)
     if not meal:
-        return "Meal not found", 404
+        abort(404, description="Meal not found.")
 
     user_id = session.get("user_id")
     if not user_id:
@@ -647,10 +662,10 @@ def rate_meal(meal_id):
 def edit_meal(meal_id):
     meal = meals.get_meal_by_id(meal_id)
     if not meal:
-        return "Meal not found", 404
+        abort(404, description="Meal not found.")
 
     if session.get("user_id") != meal["user_id"]:
-        return "Unauthorized", 403
+        abort(403, description="You are not allowed to edit this meal.")
 
     if request.method == "POST":
         name = request.form.get("name", "")
@@ -684,10 +699,10 @@ def edit_meal(meal_id):
 def delete_meal(meal_id):
     meal = meals.get_meal_by_id(meal_id)
     if not meal:
-        return "Meal not found", 404
+        abort(404, description="Meal not found.")
 
     if session.get("user_id") != meal["user_id"]:
-        return "Unauthorized", 403
+        abort(403, description="You are not allowed to delete this meal.")
 
     meals.delete_meal(meal_id)
     return redirect("/")
