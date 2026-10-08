@@ -57,6 +57,16 @@
                 <input type="number" id="price" name="price" min="0" step="0.01" value="{{ meal.price or 0.0 }}">
             </p>
 
+            <p>
+                <strong>Diet categories:</strong><br>
+                {% for diet in diets %}
+                    <label>
+                        <input type="checkbox" name="diets" value="{{ diet.id }}" {% if diet.id|string in selected_diets %}checked{% endif %}>
+                        {{ diet.name }}
+                    </label><br>
+                {% endfor %}
+            </p>
+
             <button type="submit">Save changes</button>
         </form>
 

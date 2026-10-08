@@ -32,6 +32,11 @@
     </header>
 
     <main>
+        {% with notifications = get_flashed_messages(with_categories=true) %}
+            {% for category, message in notifications %}
+                <div class="form-error" role="alert">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
         {% block content %}{% endblock %}
     </main>
 </body>

@@ -111,6 +111,18 @@ def get_meal_types():
     return query("SELECT id, name FROM meal_types ORDER BY id")
 
 
+def get_diets():
+    return query("SELECT id, name FROM diets ORDER BY id")
+
+
+def get_meal_comment_target(comment_id, meal_id):
+    rows = query(
+        "SELECT id, commenter_user_id FROM meal_comments WHERE id = ? AND meal_id = ?",
+        (comment_id, meal_id),
+    )
+    return row_to_dict(rows[0]) if rows else None
+
+
 def add_meal_comment(meal_id, author, body, parent_comment_id=None, commenter_user_id=None):
     author = (author or "").strip() or "Anonyymi"
     body = (body or "").strip()

@@ -54,10 +54,10 @@ def test_csrf_token_is_required_and_rotated_after_login(client):
     missing_token_response = client.post(
         '/login',
         data={'username': username, 'password': 'secret123'},
+        follow_redirects=True,
     )
-    assert missing_token_response.status_code == 403
-    assert b'403 - Forbidden' in missing_token_response.data
-    assert b'Invalid CSRF token.' in missing_token_response.data
+    assert missing_token_response.status_code == 200
+    assert b'Your session could not be verified. Please try again.' in missing_token_response.data
 
     with client.session_transaction() as session:
         old_token = session['csrf_token']
@@ -364,7 +364,7 @@ def test_meal_routes_reject_invalid_numeric_values(client, field, value, expecte
 
 def test_oversized_search_and_message_are_rejected(client):
     search_response = client.get('/', query_string={'query': 'q' * 1001})
-    assert search_response.status_code == 400
+    assert search_response.status_code == 200
     assert b'Search query cannot be longer than 1000 characters.' in search_response.data
 
     message_response = client.post(
@@ -373,43 +373,47 @@ def test_oversized_search_and_message_are_rejected(client):
     )
     assert message_response.status_code == 400
     assert b'Message cannot be longer than 1000 characters.' in message_response.data
+    assert b'm' * 1001 in message_response.data
     assert b'Message sent' not in message_response.data
 
 
 @pytest.mark.parametrize('query_key, value', [('min_price', '-1'), ('max_price', 'not-a-number')])
 def test_price_search_filters_reject_invalid_numbers(client, query_key, value):
     response = client.get('/', query_string={query_key: value})
-    assert response.status_code == 400
+    assert response.status_code == 200
     assert b'Price filters must be valid numbers greater than or equal to 0.' in response.data
 
 
 def test_oversized_input_is_rejected_globally(client):
-    response = client.get('/', query_string={'unused': 'x' * 10001})
-    assert response.status_code == 400
-    assert b'400 - Bad Request' in response.data
+    response = client.get('/', query_string={'unused': 'x' * 10001}, follow_redirects=True)
+    assert response.status_code == 200
     assert b'Input values cannot be longer than 10000 characters.' in response.data
 
 
-def test_http_errors_use_common_error_page(client):
-    not_found_response = client.get('/meal/99999999')
-    assert not_found_response.status_code == 404
-    assert b'404 - Not Found' in not_found_response.data
-    assert b'Meal not found.' in not_found_response.data
+def test_http_errors_show_notifications_on_an_application_page(client):
+    not_found_response = client.get('/meal/99999999', follow_redirects=True)
+    assert not_found_response.status_code == 200
+    assert b'That meal could not be found.' in not_found_response.data
 
-    method_not_allowed_response = client.post('/', data=csrf_data(client, {}))
-    assert method_not_allowed_response.status_code == 405
-    assert b'405 - Method Not Allowed' in method_not_allowed_response.data
+    method_not_allowed_response = client.post(
+        '/',
+        data=csrf_data(client, {}),
+        follow_redirects=True,
+    )
+    assert method_not_allowed_response.status_code == 200
+    assert b'That action is not available on this page.' in method_not_allowed_response.data
 
     oversized_request_response = client.post(
         '/result',
         data={'message': 'm' * (64 * 1024 + 1)},
         content_type='application/x-www-form-urlencoded',
+        follow_redirects=True,
     )
-    assert oversized_request_response.status_code == 413
-    assert b'413 - Request Entity Too Large' in oversized_request_response.data
+    assert oversized_request_response.status_code == 200
+    assert b'The submitted information is too large.' in oversized_request_response.data
 
 
-def test_internal_server_error_page_does_not_expose_exception(client, monkeypatch):
+def test_internal_server_error_shows_notification_without_exposing_exception(client, monkeypatch):
     with app.app_context():
         username = 'internal-error-handler-user'
         old_user = users.get_user_by_username(username)
@@ -427,10 +431,9 @@ def test_internal_server_error_page_does_not_expose_exception(client, monkeypatc
     monkeypatch.setattr(meals, 'get_meals_by_user', raise_database_error)
     monkeypatch.setitem(app.config, 'PROPAGATE_EXCEPTIONS', False)
 
-    response = client.get('/profile')
+    response = client.get('/profile', follow_redirects=True)
 
-    assert response.status_code == 500
-    assert b'500 - Internal Server Error' in response.data
+    assert response.status_code == 200
     assert b'Please try again later.' in response.data
     assert b'private database details' not in response.data
 
@@ -526,6 +529,79 @@ def test_edit_meal_route_rejects_invalid_names(client, name, error):
         users.delete_user(user_id)
 
 
+def test_edit_meal_route_displays_and_updates_diet_categories(client):
+    with app.app_context():
+        username = 'edit-meal-diets-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+        meal_id = meals.create_meal(
+            user_id=user_id,
+            name='Diet edit meal',
+            meal_type='Dinner',
+            diet_tags='1,4',
+        )
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+
+    edit_response = client.get(f'/meal/{meal_id}/edit')
+
+    assert edit_response.status_code == 200
+    assert b'value="1" checked' in edit_response.data
+    assert b'value="4" checked' in edit_response.data
+    assert b'value="2" checked' not in edit_response.data
+
+    update_response = client.post(
+        f'/meal/{meal_id}/edit',
+        data=csrf_data(
+            client,
+            {'name': 'Diet edit meal', 'meal_type': 'Dinner', 'diets': ['2', '3']},
+        ),
+    )
+
+    assert update_response.status_code == 302
+    with app.app_context():
+        assert meals.get_meal_by_id(meal_id)['diet_tags'] == '2,3'
+        users.delete_user(user_id)
+
+
+def test_edit_meal_validation_error_preserves_selected_diets(client):
+    with app.app_context():
+        username = 'edit-meal-diets-error-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+        meal_id = meals.create_meal(
+            user_id=user_id,
+            name='Diet validation meal',
+            meal_type='Dinner',
+            diet_tags='1',
+        )
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+
+    response = client.post(
+        f'/meal/{meal_id}/edit',
+        data=csrf_data(
+            client,
+            {'name': ' Diet validation meal', 'meal_type': 'Dinner', 'diets': ['2', '4']},
+        ),
+    )
+
+    assert response.status_code == 200
+    assert b'value="2" checked' in response.data
+    assert b'value="4" checked' in response.data
+    assert b'value="1" checked' not in response.data
+
+    with app.app_context():
+        assert meals.get_meal_by_id(meal_id)['diet_tags'] == '1'
+        users.delete_user(user_id)
+
+
 def test_meal_comments_can_be_added_and_empty_comments_are_rejected(client):
     with app.app_context():
         username = 'meal-comment-user'
@@ -579,8 +655,10 @@ def test_only_meal_owner_can_reply_to_comments(client):
     forbidden_response = client.post(
         f'/meal/{meal_id}/comments/{comment_id}/reply',
         data=csrf_data(client, {'reply': 'Here is the recipe.'}),
+        follow_redirects=True,
     )
-    assert forbidden_response.status_code == 403
+    assert forbidden_response.status_code == 200
+    assert b'Only the meal owner can reply to comments.' in forbidden_response.data
 
     with client.session_transaction() as session:
         session['user_id'] = owner_id
@@ -635,8 +713,10 @@ def test_opening_comment_and_reply_messages_marks_them_read(client):
 
     unauthorized_open_response = client.get(
         f"/messages/{notifications[0]['id']}/open",
+        follow_redirects=True,
     )
-    assert unauthorized_open_response.status_code == 404
+    assert unauthorized_open_response.status_code == 200
+    assert b'That notification could not be found.' in unauthorized_open_response.data
     with app.app_context():
         assert db.get_unread_notification_count(owner_id) == 1
 

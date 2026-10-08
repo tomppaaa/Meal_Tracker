@@ -6,7 +6,7 @@
     <h2>Send message</h2>
 
     {% if errors %}
-        <div class="form-error">
+        <div class="form-error" role="alert">
             <ul>
                 {% for error in errors %}
                     <li>{{ error }}</li>
