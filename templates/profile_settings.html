@@ -1,0 +1,68 @@
+{% extends "layout.html" %}
+
+{% block title %}Account Settings{% endblock %}
+
+{% block content %}
+    {% if errors %}
+        <div class="form-error">
+            <ul>
+                {% for error in errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <section class="meal-card">
+        <h2>Account settings</h2>
+        <p><a href="/profile" class="action-link">Back to profile</a></p>
+    </section>
+
+    <section class="meal-card">
+        <h2>Change username</h2>
+        <form action="/profile/change-username" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <p>
+                <label for="new_username">New username:</label><br>
+                <input type="text" id="new_username" name="new_username" value="{{ user.username }}" required>
+            </p>
+            <p>
+                <label for="password_for_username">Current password:</label><br>
+                <input type="password" id="password_for_username" name="password" required>
+            </p>
+            <button type="submit">Update username</button>
+        </form>
+    </section>
+
+    <section class="meal-card">
+        <h2>Change password</h2>
+        <form action="/profile/change-password" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <p>
+                <label for="current_password">Current password:</label><br>
+                <input type="password" id="current_password" name="current_password" required>
+            </p>
+            <p>
+                <label for="new_password">New password:</label><br>
+                <input type="password" id="new_password" name="new_password" required>
+            </p>
+            <p>
+                <label for="confirm_password">Confirm new password:</label><br>
+                <input type="password" id="confirm_password" name="confirm_password" required>
+            </p>
+            <button type="submit">Update password</button>
+        </form>
+    </section>
+
+    <section class="meal-card">
+        <h2>Delete account</h2>
+        <form action="/profile/delete-account" method="POST" onsubmit="return confirm('This will permanently delete your account and all your meals. Continue?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <p>
+                <label for="password">Confirm password to delete account:</label><br>
+                <input type="password" id="password" name="password" required>
+            </p>
+            <button type="submit" class="danger-button">Delete account</button>
+        </form>
+    </section>
+{% endblock %}

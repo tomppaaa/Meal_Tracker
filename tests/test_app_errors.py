@@ -168,6 +168,62 @@ def test_profile_meals_shows_statistics_by_type_and_diet(client):
             users.delete_user(user['id'])
 
 
+def test_profile_shows_overview_and_links_to_separate_account_settings(client):
+    with app.app_context():
+        username = 'profile-settings-user'
+        old_user = users.get_user_by_username(username)
+        if old_user:
+            users.delete_user(old_user['id'])
+        user_id = users.create_user(username, 'secret123')
+
+    with client.session_transaction() as session:
+        session['user_id'] = user_id
+        session['user_name'] = username
+
+    profile_response = client.get('/profile')
+    assert profile_response.status_code == 200
+    assert b'Account settings' in profile_response.data
+    assert b'Change username' not in profile_response.data
+    assert b'Change password' not in profile_response.data
+    assert b'Delete account' not in profile_response.data
+
+    settings_response = client.get('/profile/settings')
+    assert settings_response.status_code == 200
+    assert b'Change username' in settings_response.data
+    assert b'Change password' in settings_response.data
+    assert b'Delete account' in settings_response.data
+
+    invalid_settings_submissions = [
+        (
+            '/profile/change-username',
+            {'new_username': 'new-profile-name', 'password': 'wrong'},
+            b'Password is incorrect.',
+        ),
+        (
+            '/profile/change-password',
+            {
+                'current_password': 'wrong',
+                'new_password': 'new-secret',
+                'confirm_password': 'new-secret',
+            },
+            b'Current password is incorrect.',
+        ),
+        (
+            '/profile/delete-account',
+            {'password': 'wrong'},
+            b'Password is incorrect.',
+        ),
+    ]
+    for endpoint, form_data, error_message in invalid_settings_submissions:
+        response = client.post(endpoint, data=csrf_data(client, form_data))
+        assert response.status_code == 200
+        assert b'Account settings' in response.data
+        assert error_message in response.data
+
+    with app.app_context():
+        users.delete_user(user_id)
+
+
 def test_meal_name_maximum_length_is_validated_before_insert(client):
     with app.app_context():
         username = 'meal-name-length-user'

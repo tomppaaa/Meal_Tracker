@@ -281,6 +281,21 @@ def profile():
     return render_form_with_errors("profile.html", errors=[], **context)
 
 
+@app.route("/profile/settings")
+def profile_settings():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+
+    user = users.get_user_by_id(user_id)
+    if not user:
+        session.pop("user_id", None)
+        session.pop("user_name", None)
+        return redirect("/login")
+
+    return render_form_with_errors("profile_settings.html", errors=[], user=user)
+
+
 @app.route("/profile/meals")
 def profile_meals():
     user_id = session.get("user_id")
@@ -357,8 +372,7 @@ def change_password():
         errors.append("New passwords do not match.")
 
     if errors:
-        context = build_profile_view(user_id, user)
-        return render_form_with_errors("profile.html", errors=errors, **context)
+        return render_form_with_errors("profile_settings.html", errors=errors, user=user)
 
     users.update_password(user_id, new_password)
     return redirect("/profile")
@@ -386,14 +400,12 @@ def change_username():
         errors.append("Username cannot be longer than 50 characters.")
 
     if errors:
-        context = build_profile_view(user_id, user)
-        return render_form_with_errors("profile.html", errors=errors, **context)
+        return render_form_with_errors("profile_settings.html", errors=errors, user=user)
 
     try:
         users.update_username(user_id, new_username)
     except ValueError as error:
-        context = build_profile_view(user_id, user)
-        return render_form_with_errors("profile.html", errors=[str(error)], **context)
+        return render_form_with_errors("profile_settings.html", errors=[str(error)], user=user)
 
     session["user_name"] = new_username
     return redirect("/profile")
@@ -411,8 +423,11 @@ def delete_account():
         return redirect("/login")
 
     if not users.verify_user(user["username"], password):
-        context = build_profile_view(user_id, user)
-        return render_form_with_errors("profile.html", errors=["Password is incorrect."], **context)
+        return render_form_with_errors(
+            "profile_settings.html",
+            errors=["Password is incorrect."],
+            user=user,
+        )
 
     users.delete_user(user_id)
     session.pop("user_id", None)

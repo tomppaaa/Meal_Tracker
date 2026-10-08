@@ -19,6 +19,7 @@
             {% if session.get("user_id") %}
                 <a href="/">Home</a>
                 <a href="/profile">Profile</a>
+                <a href="/profile/settings">Settings</a>
                 <a href="/profile/meals">My meal stats</a>
                 <a href="/messages">Messages{% if unread_notification_count %} ({{ unread_notification_count }}){% endif %}</a>
                 <a href="/logout">Log out</a>
