@@ -17,9 +17,13 @@ def parse_price_filter(value):
     try:
         price = float(value)
     except ValueError as error:
-        raise ValueError("Price filters must be valid numbers greater than or equal to 0.") from error
+        raise ValueError(
+            "Price filters must be valid numbers greater than or equal to 0."
+        ) from error
     if not math.isfinite(price) or price < 0:
-        raise ValueError("Price filters must be valid numbers greater than or equal to 0.")
+        raise ValueError(
+            "Price filters must be valid numbers greater than or equal to 0."
+        )
     return price
 
 
@@ -63,7 +67,11 @@ def build_meal_statistics(user_id):
             "carbs": sum((meal.get("carbs") or 0) for meal in meal_list),
             "fat": sum((meal.get("fat") or 0) for meal in meal_list),
             "price": sum((meal.get("price") or 0) for meal in meal_list),
-            "average_calories": (sum((meal.get("calories") or 0) for meal in meal_list) / count) if count else 0,
+            "average_calories": (
+                (sum((meal.get("calories") or 0) for meal in meal_list) / count)
+                if count
+                else 0
+            ),
         }
 
     grouped_by_type = {}
@@ -77,14 +85,19 @@ def build_meal_statistics(user_id):
 
     return {
         "overall": summarize(user_meals),
-        "by_type": [(name, summarize(group)) for name, group in sorted(grouped_by_type.items())],
-        "by_diet": [(name, summarize(group)) for name, group in sorted(grouped_by_diet.items())],
+        "by_type": [
+            (name, summarize(group)) for name, group in sorted(grouped_by_type.items())
+        ],
+        "by_diet": [
+            (name, summarize(group)) for name, group in sorted(grouped_by_diet.items())
+        ],
     }
 
 
 @bp.route("/register")
 def register():
     return render_template("register.html", errors=[], username="")
+
 
 @bp.route("/create", methods=["POST"])
 def create():
@@ -105,17 +118,22 @@ def create():
         errors.append("Password cannot be longer than 128 characters.")
 
     if errors:
-        return render_form_with_errors("register.html", errors=errors, username=username)
+        return render_form_with_errors(
+            "register.html", errors=errors, username=username
+        )
 
     try:
         user_id = users.create_user(username, password1)
     except ValueError as error:
-        return render_form_with_errors("register.html", errors=[str(error)], username=username)
+        return render_form_with_errors(
+            "register.html", errors=[str(error)], username=username
+        )
 
     session["user_id"] = user_id
     session["user_name"] = username
     session["csrf_token"] = secrets.token_urlsafe(32)
     return redirect("/")
+
 
 @bp.route("/login", methods=["GET", "POST"])
 def login():
@@ -133,11 +151,17 @@ def login():
             errors.append("Invalid username or password.")
 
         if errors:
-            return render_form_with_errors("login.html", errors=errors, username=username)
+            return render_form_with_errors(
+                "login.html", errors=errors, username=username
+            )
 
         user = users.verify_user(username, password)
         if not user:
-            return render_form_with_errors("login.html", errors=["Invalid username or password."], username=username)
+            return render_form_with_errors(
+                "login.html",
+                errors=["Invalid username or password."],
+                username=username,
+            )
 
         session["user_id"] = user["id"]
         session["user_name"] = user["username"]
@@ -146,11 +170,13 @@ def login():
 
     return render_form_with_errors("login.html", errors=[], username="")
 
+
 @bp.route("/logout")
 def logout():
     session.pop("user_id", None)
     session.pop("user_name", None)
     return redirect("/")
+
 
 @bp.route("/profile")
 def profile():
@@ -216,7 +242,9 @@ def open_notification(notification_id):
 
     notification = db.get_notification_target(notification_id, user_id)
     if not notification:
-        return redirect_with_error("That notification could not be found.", fallback="/messages")
+        return redirect_with_error(
+            "That notification could not be found.", fallback="/messages"
+        )
 
     db.mark_notification_read(notification_id, user_id)
     return redirect(
@@ -228,7 +256,9 @@ def open_notification(notification_id):
 def user_meals(user_id):
     user = users.get_user_by_id(user_id)
     if not user:
-        return redirect_with_error("That user's profile could not be found.", fallback="/")
+        return redirect_with_error(
+            "That user's profile could not be found.", fallback="/"
+        )
 
     user_meals = meals.get_meals_by_user(user_id)
     return render_template("user_meals.html", user=user, meals=user_meals)
@@ -259,7 +289,9 @@ def change_password():
         errors.append("New passwords do not match.")
 
     if errors:
-        return render_form_with_errors("profile_settings.html", errors=errors, user=user)
+        return render_form_with_errors(
+            "profile_settings.html", errors=errors, user=user
+        )
 
     users.update_password(user_id, new_password)
     return redirect("/profile")
@@ -287,12 +319,16 @@ def change_username():
         errors.append("Username cannot be longer than 50 characters.")
 
     if errors:
-        return render_form_with_errors("profile_settings.html", errors=errors, user=user)
+        return render_form_with_errors(
+            "profile_settings.html", errors=errors, user=user
+        )
 
     try:
         users.update_username(user_id, new_username)
     except ValueError as error:
-        return render_form_with_errors("profile_settings.html", errors=[str(error)], user=user)
+        return render_form_with_errors(
+            "profile_settings.html", errors=[str(error)], user=user
+        )
 
     session["user_name"] = new_username
     return redirect("/profile")
@@ -363,30 +399,37 @@ def index():
         max_price=max_price,
     )
 
-# Näytetään itse lomake (GET-pyyntö)
+
+# Display the form for a GET request.
 @bp.route("/messages/new")
 @bp.route("/form")
 def form():
     return render_template("message_form.html")
 
-# Vastaanotetaan lomakkeen tiedot (POST-pyyntö) ja näytetään tulos
+
+# Receive the form submission and display its result.
 @bp.route("/messages/success", methods=["POST"])
 @bp.route("/result", methods=["POST"])
 def result():
     user_message = request.form.get("message", "")
     if len(user_message) > MAX_MESSAGE_LENGTH:
-        return render_form_with_errors(
-            "message_form.html",
-            errors=["Message cannot be longer than 1000 characters."],
-            message=user_message,
-        ), 400
+        return (
+            render_form_with_errors(
+                "message_form.html",
+                errors=["Message cannot be longer than 1000 characters."],
+                message=user_message,
+            ),
+            400,
+        )
     return render_template("message_success.html", message=user_message)
 
 
 @bp.route("/meals/new")
 @bp.route("/meal")
 def show_form():
-    return render_template("meal.html", diets=db.get_diets(), meal_types=db.get_meal_types())
+    return render_template(
+        "meal.html", diets=db.get_diets(), meal_types=db.get_meal_types()
+    )
 
 
 @bp.route("/meals/<int:meal_id>")
@@ -397,7 +440,15 @@ def meal_detail(meal_id):
         return redirect_with_error("That meal could not be found.", fallback="/")
     comments = db.get_meal_comments(meal_id)
     ratings = db.get_meal_rating_summary(meal_id, session.get("user_id"))
-    return render_template("meal_detail.html", meal=meal, comments=comments, comment_error=None, ratings=ratings, rating_error=None, diets=db.get_diets())
+    return render_template(
+        "meal_detail.html",
+        meal=meal,
+        comments=comments,
+        comment_error=None,
+        ratings=ratings,
+        rating_error=None,
+        diets=db.get_diets(),
+    )
 
 
 @bp.route("/meals/<int:meal_id>/comments", methods=["POST"])
@@ -468,11 +519,17 @@ def reply_to_meal_comment(meal_id, comment_id):
 
     parent_comment = db.get_meal_comment_target(comment_id, meal_id)
     if not parent_comment:
-        return redirect_with_error("That comment could not be found.", fallback=f"/meal/{meal_id}")
+        return redirect_with_error(
+            "That comment could not be found.", fallback=f"/meal/{meal_id}"
+        )
 
     reply_body = request.form.get("reply", "").strip()
     if not reply_body or len(reply_body) > 1000:
-        error = "Reply cannot be empty." if not reply_body else "Reply cannot be longer than 1000 characters."
+        error = (
+            "Reply cannot be empty."
+            if not reply_body
+            else "Reply cannot be longer than 1000 characters."
+        )
         return render_template(
             "meal_detail.html",
             meal=meal,
@@ -603,7 +660,7 @@ def delete_meal(meal_id):
     return redirect("/")
 
 
-# 2. POST-reitti: Otetaan lomakkeen tiedot vastaan
+# Handle a POST request that creates a meal.
 @bp.route("/meals", methods=["POST"])
 @bp.route("/add_meal", methods=["POST"])
 def add_meal():
@@ -680,4 +737,3 @@ def add_meal():
         )
 
     return redirect("/")
-

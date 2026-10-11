@@ -10,7 +10,10 @@ def redirect_with_error(message, fallback="/"):
     if referrer:
         referrer_parts = urlsplit(referrer)
         request_host = urlsplit(request.host_url).netloc
-        if referrer_parts.scheme in ("http", "https") and referrer_parts.netloc == request_host:
+        if (
+            referrer_parts.scheme in ("http", "https")
+            and referrer_parts.netloc == request_host
+        ):
             return redirect(referrer)
     return redirect(fallback)
 

@@ -27,7 +27,8 @@ def ensure_meals_schema():
     if "diet_tags" not in existing:
         con.execute("ALTER TABLE meals ADD COLUMN diet_tags TEXT DEFAULT ''")
 
-    con.execute("""
+    con.execute(
+        """
         CREATE TABLE IF NOT EXISTS meal_comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
@@ -37,21 +38,37 @@ def ensure_meals_schema():
             commenter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+        """
+    )
     comment_columns = con.execute("PRAGMA table_info(meal_comments)").fetchall()
     existing_comment_columns = {row[1] for row in comment_columns}
     if "parent_comment_id" not in existing_comment_columns:
-        con.execute("ALTER TABLE meal_comments ADD COLUMN parent_comment_id INTEGER REFERENCES meal_comments(id) ON DELETE CASCADE")
+        con.execute(
+            """
+            ALTER TABLE meal_comments
+            ADD COLUMN parent_comment_id INTEGER
+                REFERENCES meal_comments(id) ON DELETE CASCADE
+            """
+        )
     if "commenter_user_id" not in existing_comment_columns:
-        con.execute("ALTER TABLE meal_comments ADD COLUMN commenter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL")
-        con.execute("""
+        con.execute(
+            """
+            ALTER TABLE meal_comments
+            ADD COLUMN commenter_user_id INTEGER
+                REFERENCES users(id) ON DELETE SET NULL
+            """
+        )
+        con.execute(
+            """
             UPDATE meal_comments
             SET commenter_user_id = (
                 SELECT users.id FROM users WHERE users.username = meal_comments.author
             )
             WHERE commenter_user_id IS NULL
-        """)
-    con.execute("""
+            """
+        )
+    con.execute(
+        """
         CREATE TABLE IF NOT EXISTS meal_ratings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
@@ -60,19 +77,24 @@ def ensure_meals_schema():
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(meal_id, user_id)
         )
-    """)
-    con.execute("""
+        """
+    )
+    con.execute(
+        """
         CREATE TABLE IF NOT EXISTS notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
             meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
             comment_id INTEGER NOT NULL REFERENCES meal_comments(id) ON DELETE CASCADE,
-            notification_type TEXT NOT NULL CHECK(notification_type IN ('new_comment', 'comment_reply')),
+            notification_type TEXT NOT NULL CHECK(
+                notification_type IN ('new_comment', 'comment_reply')
+            ),
             is_read INTEGER NOT NULL DEFAULT 0 CHECK(is_read IN (0, 1)),
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+        """
+    )
     con.commit()
     con.close()
 
@@ -95,10 +117,18 @@ def query(sql, params=[]):
     con.close()
     return result
 
+
 def get_meal_comments(meal_id):
     return query(
         """
-        SELECT id, meal_id, author, body, parent_comment_id, commenter_user_id, created_at
+        SELECT
+            id,
+            meal_id,
+            author,
+            body,
+            parent_comment_id,
+            commenter_user_id,
+            created_at
         FROM meal_comments
         WHERE meal_id = ?
         ORDER BY created_at DESC, id DESC
@@ -117,14 +147,20 @@ def get_diets():
 
 def get_meal_comment_target(comment_id, meal_id):
     rows = query(
-        "SELECT id, commenter_user_id FROM meal_comments WHERE id = ? AND meal_id = ?",
+        """
+        SELECT id, commenter_user_id
+        FROM meal_comments
+        WHERE id = ? AND meal_id = ?
+        """,
         (comment_id, meal_id),
     )
     return row_to_dict(rows[0]) if rows else None
 
 
-def add_meal_comment(meal_id, author, body, parent_comment_id=None, commenter_user_id=None):
-    author = (author or "").strip() or "Anonyymi"
+def add_meal_comment(
+    meal_id, author, body, parent_comment_id=None, commenter_user_id=None
+):
+    author = (author or "").strip() or "Anonymous"
     body = (body or "").strip()
 
     if not body:
@@ -159,9 +195,17 @@ def create_notification(user_id, actor_user_id, meal_id, comment_id, notificatio
 def get_notifications(user_id):
     return query(
         """
-        SELECT n.id, n.user_id, n.actor_user_id, n.meal_id, n.comment_id,
-               n.notification_type, n.is_read, n.created_at, m.name AS meal_name,
-               actor.username AS actor_username
+        SELECT
+            n.id,
+            n.user_id,
+            n.actor_user_id,
+            n.meal_id,
+            n.comment_id,
+            n.notification_type,
+            n.is_read,
+            n.created_at,
+            m.name AS meal_name,
+            actor.username AS actor_username
         FROM notifications n
         JOIN meals m ON m.id = n.meal_id
         LEFT JOIN users actor ON actor.id = n.actor_user_id
@@ -174,7 +218,11 @@ def get_notifications(user_id):
 
 def get_unread_notification_count(user_id):
     rows = query(
-        "SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = 0",
+        """
+        SELECT COUNT(*) AS count
+        FROM notifications
+        WHERE user_id = ? AND is_read = 0
+        """,
         (user_id,),
     )
     return rows[0]["count"]
@@ -194,7 +242,11 @@ def get_notification_target(notification_id, user_id):
 
 def mark_notification_read(notification_id, user_id):
     execute(
-        "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
+        """
+        UPDATE notifications
+        SET is_read = 1
+        WHERE id = ? AND user_id = ?
+        """,
         (notification_id, user_id),
     )
 
@@ -211,7 +263,11 @@ def get_meal_rating_summary(meal_id, user_id=None):
     user_rating = None
     if user_id:
         rows = query(
-            "SELECT rating FROM meal_ratings WHERE meal_id = ? AND user_id = ?",
+            """
+            SELECT rating
+            FROM meal_ratings
+            WHERE meal_id = ? AND user_id = ?
+            """,
             (meal_id, user_id),
         )
         user_rating = rows[0]["rating"] if rows else None

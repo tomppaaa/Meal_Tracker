@@ -27,7 +27,9 @@ def _validate_meal_number(field, value, integer=False):
     try:
         number = int(value) if integer else float(value)
     except (TypeError, ValueError, OverflowError) as error:
-        raise ValueError(f"{label} must be a valid number greater than or equal to 0.") from error
+        raise ValueError(
+            f"{label} must be a valid number greater than or equal to 0."
+        ) from error
 
     if number < 0 or (not integer and not math.isfinite(number)):
         raise ValueError(f"{label} must be a valid number greater than or equal to 0.")
@@ -87,14 +89,50 @@ def create_meal(
 
 def get_meal_by_id(meal_id):
     """Return a meal dict by id, or None if not found."""
-    row = db.query("SELECT * FROM meals WHERE id = ?", (meal_id,))
+    row = db.query(
+        """
+        SELECT
+            id,
+            user_id,
+            name,
+            meal_type,
+            calories,
+            protein,
+            carbs,
+            fat,
+            price,
+            recipe_notes,
+            diet_tags,
+            created_at
+        FROM meals
+        WHERE id = ?
+        """,
+        (meal_id,),
+    )
     return db.row_to_dict(row[0]) if row else None
 
 
 def get_meals_by_user(user_id):
     """Return all meals belonging to a specific user."""
     rows = db.query(
-        "SELECT * FROM meals WHERE user_id = ? ORDER BY created_at DESC",
+        """
+        SELECT
+            id,
+            user_id,
+            name,
+            meal_type,
+            calories,
+            protein,
+            carbs,
+            fat,
+            price,
+            recipe_notes,
+            diet_tags,
+            created_at
+        FROM meals
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+        """,
         (user_id,),
     )
     return [db.row_to_dict(row) for row in rows]
@@ -102,11 +140,31 @@ def get_meals_by_user(user_id):
 
 def get_all_meals():
     """Return all meals as a list of dicts."""
-    rows = db.query("SELECT * FROM meals ORDER BY created_at DESC")
+    rows = db.query(
+        """
+        SELECT
+            id,
+            user_id,
+            name,
+            meal_type,
+            calories,
+            protein,
+            carbs,
+            fat,
+            price,
+            recipe_notes,
+            diet_tags,
+            created_at
+        FROM meals
+        ORDER BY created_at DESC
+        """
+    )
     return [db.row_to_dict(row) for row in rows]
 
 
-def search_meals(search_query, min_price, max_price, selected_diets, selected_meal_types):
+def search_meals(
+    search_query, min_price, max_price, selected_diets, selected_meal_types
+):
     """Search meals using the selected text, price, diet, and meal-type filters."""
     sql = """
         SELECT
@@ -127,7 +185,10 @@ def search_meals(search_query, min_price, max_price, selected_diets, selected_me
         FROM meals m
         LEFT JOIN users u ON u.id = m.user_id
         LEFT JOIN (
-            SELECT meal_id, ROUND(AVG(rating), 1) AS average_rating, COUNT(*) AS rating_count
+            SELECT
+                meal_id,
+                ROUND(AVG(rating), 1) AS average_rating,
+                COUNT(*) AS rating_count
             FROM meal_ratings
             GROUP BY meal_id
         ) rating_summary ON rating_summary.meal_id = m.id

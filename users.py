@@ -21,7 +21,7 @@ def create_user(username, password):
     if existing:
         raise ValueError("Username already exists.")
 
-    password_hash = generate_password_hash(password)
+    password_hash = generate_password_hash(password, method="scrypt")
     db.execute(
         "INSERT INTO users (username, password_hash) VALUES (?, ?)",
         (username, password_hash),
@@ -57,7 +57,10 @@ def get_all_users():
 
 def verify_user(username, password):
     """Check username/password pair and return the user dict if valid."""
-    if len(username or "") > MAX_USERNAME_LENGTH or len(password or "") > MAX_PASSWORD_LENGTH:
+    if (
+        len(username or "") > MAX_USERNAME_LENGTH
+        or len(password or "") > MAX_PASSWORD_LENGTH
+    ):
         return None
     user = get_user_by_username(username)
     if not user:
@@ -95,7 +98,7 @@ def update_password(user_id, new_password):
 
     db.execute(
         "UPDATE users SET password_hash = ? WHERE id = ?",
-        (generate_password_hash(new_password), user_id),
+        (generate_password_hash(new_password, method="scrypt"), user_id),
     )
     return True
 

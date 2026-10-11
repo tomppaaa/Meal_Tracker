@@ -47,7 +47,9 @@ def protect_from_csrf():
         or not submitted_token
         or not hmac.compare_digest(submitted_token, session_token)
     ):
-        return redirect_with_error("Your session could not be verified. Please try again.")
+        return redirect_with_error(
+            "Your session could not be verified. Please try again."
+        )
     return None
 
 
@@ -59,7 +61,9 @@ def limit_input_lengths():
             for value_list in values.listvalues()
             for value in value_list
         ):
-            return redirect_with_error("Input values cannot be longer than 10000 characters.")
+            return redirect_with_error(
+                "Input values cannot be longer than 10000 characters."
+            )
     return None
 
 
