@@ -1,54 +1,75 @@
 # Meal Tracker
 
-Meal Tracker is a Flask web application for recording, browsing, and managing meals. It stores meal and account data in SQLite and supports searching meals by name, price, meal type, and diet category.
+Meal Tracker is a Flask application for sharing and managing meals. Users can create accounts, add meals, browse and search meals, and interact through comments and ratings. The application stores data in a local SQLite database.
 
 ## Features
 
-- Create an account, sign in, and sign out.
-- Manage your profile by changing your username or password, viewing meal statistics, or deleting your account.
-- Add, edit, and delete your own meals, including meal type, calories, protein, carbohydrates, fat, price, and diet categories.
-- Browse meal details and view meals shared by other users.
-- Search and filter meals by name, minimum or maximum price, meal type, and diet category.
-- Comment on meals, reply to comments on your own meals, and rate meals from one to five stars.
-- View meal statistics by meal type and diet category, including calorie and price totals.
-- Use database-backed meal types and diet categories, initialized with default values when the application starts.
-- Benefit from server-side validation for text lengths and numeric values, along with CSRF protection for form submissions.
+- Register, sign in, sign out, and manage an account.
+- Store passwords as scrypt hashes rather than plain text.
+- Create, edit, browse, and delete meals. Meal information includes meal type, calories, protein, carbohydrates, fat, price, and diet categories.
+- Search meals by name, price range, meal type, and diet category.
+- View meal details and public meal lists for users.
+- Comment on meals and reply to comments on meals you own.
+- Rate meals from one to five stars and view rating summaries.
+- View profile statistics, including totals and breakdowns by meal type and diet category.
+- Receive notifications about comments and replies.
+- Validate input on the server and protect POST form submissions against CSRF.
 
-## Setup
+## Requirements
 
-1. Clone the repository and open a terminal in the project directory:
+- Python 3
+- The packages listed in `requirements.txt`
+- Pytest to run the test suite
 
-   ```bash
-   git clone https://github.com/tomppaaa/Meal_Tracker.git
-   cd Meal_Tracker
-   ```
+## Setup and run
 
-2. Make sure Python 3 is installed, then install the dependencies:
+Clone the repository and change into its directory:
 
-   ```bash
-   python3 -m pip install -r requirements.txt
-   ```
+```bash
+git clone https://github.com/tomppaaa/Meal_Tracker.git
+cd Meal_Tracker
+```
 
-3. Start the application:
+Install the application dependencies:
 
-   ```bash
-   python3 app.py
-   ```
+```bash
+python3 -m pip install -r requirements.txt
+```
 
-   On startup, the application reads `init.sql` and creates or initializes the SQLite database. The `init.sql` file must remain in the project directory alongside `db.py`.
+Start the development server:
 
-4. Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in a browser. Create an account to add and manage meals.
+```bash
+python3 app.py
+```
 
-## Running tests
+On startup, the application initializes the SQLite schema from `init.sql` and creates or updates supporting tables. The database file, `database.db`, is created in the current working directory. Run the command from the project directory, and keep `init.sql` alongside `db.py`.
 
-Run the test suite from the project directory:
+Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in a browser and register an account to add meals.
+
+## Tests
+
+Install pytest if it is not already available in your Python environment:
+
+```bash
+python3 -m pip install pytest
+```
+
+Run the tests from the project directory:
 
 ```bash
 python3 -m pytest
 ```
 
-To check the Python source with Pylint:
+## Project files
 
-```bash
-pylint app.py config.py db.py meals.py users.py
-```
+- `app.py` creates the Flask app, registers request protections, and sets up the database.
+- `routes.py` contains the application routes.
+- `users.py` and `meals.py` implement account and meal operations.
+- `db.py` contains database access and initializes supporting tables.
+- `init.sql` defines and seeds the base SQLite schema.
+- `templates/` contains the Jinja HTML templates; `static/` contains static assets.
+- `tests/` contains the automated tests.
+
+## Deployment note
+
+The included `app.py` starts Flask with debug mode enabled, and `config.py` contains the application secret key. These settings are for local development only. Before deploying, disable debug mode, configure a private secret key outside source control, and run the app behind a production-ready WSGI server.
