@@ -267,6 +267,8 @@ def test_profile_shows_overview_and_links_to_separate_account_settings(client):
         assert response.status_code == 200
         assert b"Account settings" in response.data
         assert error_message in response.data
+        if endpoint == "/profile/change-username":
+            assert b'value="new-profile-name"' in response.data
 
     with app.app_context():
         users.delete_user(user_id)
@@ -474,6 +476,7 @@ def test_meal_routes_reject_invalid_numeric_values(
 
     assert response.status_code == 200
     assert expected_error.encode() in response.data
+    assert f'value="{value}"'.encode() in response.data
 
     with app.app_context():
         if route == "add":
@@ -760,7 +763,12 @@ def test_edit_meal_validation_error_preserves_selected_diets(client):
             client,
             {
                 "name": " Diet validation meal",
-                "meal_type": "Dinner",
+                "meal_type": "Breakfast",
+                "calories": "412",
+                "protein": "23.5",
+                "carbs": "57",
+                "fat": "9.25",
+                "price": "12.40",
                 "diets": ["2", "4"],
             },
         ),
@@ -770,6 +778,13 @@ def test_edit_meal_validation_error_preserves_selected_diets(client):
     assert b'value="2" checked' in response.data
     assert b'value="4" checked' in response.data
     assert b'value="1" checked' not in response.data
+    assert b'value=" Diet validation meal"' in response.data
+    assert b'value="Breakfast" selected' in response.data
+    assert b'value="412"' in response.data
+    assert b'value="23.5"' in response.data
+    assert b'value="57"' in response.data
+    assert b'value="9.25"' in response.data
+    assert b'value="12.40"' in response.data
 
     with app.app_context():
         assert meals.get_meal_by_id(meal_id)["diet_tags"] == "1"

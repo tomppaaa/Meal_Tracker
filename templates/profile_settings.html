@@ -24,7 +24,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <p>
                 <label for="new_username">New username:</label><br>
-                <input type="text" id="new_username" name="new_username" value="{{ user.username }}" required>
+                <input type="text" id="new_username" name="new_username" value="{{ new_username if new_username is defined else user.username }}" required>
             </p>
             <p>
                 <label for="password_for_username">Current password:</label><br>

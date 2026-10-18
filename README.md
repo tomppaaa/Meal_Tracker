@@ -62,8 +62,7 @@ python3 -m pytest
 
 ## Project files
 
-- `app.py` creates the Flask app, registers request protections, and sets up the database.
-- `routes.py` contains the application routes.
+- `app.py` creates the Flask app, registers request protections, sets up the database, and contains the application routes.
 - `users.py` and `meals.py` implement account and meal operations.
 - `db.py` contains database access and initializes supporting tables.
 - `init.sql` defines and seeds the base SQLite schema.

@@ -27,34 +27,34 @@
                 <label for="meal_type">Meal type:</label><br>
                 <select id="meal_type" name="meal_type" required>
                     {% for meal_type in meal_types %}
-                        <option value="{{ meal_type.name }}" {% if meal.meal_type == meal_type.name %}selected{% endif %}>{{ meal_type.name }}</option>
+                        <option value="{{ meal_type.name }}" {% if (selected_meal_type if selected_meal_type is defined else meal.meal_type) == meal_type.name %}selected{% endif %}>{{ meal_type.name }}</option>
                     {% endfor %}
                 </select>
             </p>
 
             <p>
                 <label for="calories">Calories (kcal):</label><br>
-                <input type="number" id="calories" name="calories" min="0" value="{{ meal.calories or 0 }}">
+                <input type="number" id="calories" name="calories" min="0" value="{{ calories_value if calories_value is defined else (meal.calories or 0) }}">
             </p>
 
             <p>
                 <label for="protein">Protein (g):</label><br>
-                <input type="number" id="protein" name="protein" min="0" value="{{ meal.protein or 0 }}">
+                <input type="number" id="protein" name="protein" min="0" value="{{ protein_value if protein_value is defined else (meal.protein or 0) }}">
             </p>
 
             <p>
                 <label for="carbs">Carbohydrates (g):</label><br>
-                <input type="number" id="carbs" name="carbs" min="0" value="{{ meal.carbs or 0 }}">
+                <input type="number" id="carbs" name="carbs" min="0" value="{{ carbs_value if carbs_value is defined else (meal.carbs or 0) }}">
             </p>
 
             <p>
                 <label for="fat">Fat (g):</label><br>
-                <input type="number" id="fat" name="fat" min="0" value="{{ meal.fat or 0 }}">
+                <input type="number" id="fat" name="fat" min="0" value="{{ fat_value if fat_value is defined else (meal.fat or 0) }}">
             </p>
 
             <p>
                 <label for="price">Price (€):</label><br>
-                <input type="number" id="price" name="price" min="0" step="0.01" value="{{ meal.price or 0.0 }}">
+                <input type="number" id="price" name="price" min="0" step="0.01" value="{{ price_value if price_value is defined else (meal.price or 0.0) }}">
             </p>
 
             <p>

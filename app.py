@@ -423,14 +423,20 @@ def change_username():
 
     if errors:
         return render_form_with_errors(
-            "profile_settings.html", errors=errors, user=user
+            "profile_settings.html",
+            errors=errors,
+            user=user,
+            new_username=new_username,
         )
 
     try:
         users.update_username(user_id, new_username)
     except ValueError as error:
         return render_form_with_errors(
-            "profile_settings.html", errors=[str(error)], user=user
+            "profile_settings.html",
+            errors=[str(error)],
+            user=user,
+            new_username=new_username,
         )
 
     session["user_name"] = new_username
@@ -707,17 +713,23 @@ def edit_meal(meal_id):
 
     if request.method == "POST":
         name = request.form.get("name", "")
+        meal_type = request.form.get("meal_type", "")
+        calories = request.form.get("calories", meal["calories"] or 0)
+        protein = request.form.get("protein", meal["protein"] or 0)
+        carbs = request.form.get("carbs", meal["carbs"] or 0)
+        fat = request.form.get("fat", meal["fat"] or 0)
+        price = request.form.get("price", meal["price"] or 0)
         selected_diets = request.form.getlist("diets")
         try:
             meals.update_meal(
                 meal_id,
                 name=name,
-                meal_type=request.form["meal_type"],
-                calories=request.form.get("calories", 0),
-                protein=request.form.get("protein", 0),
-                carbs=request.form.get("carbs", 0),
-                fat=request.form.get("fat", 0),
-                price=request.form.get("price", 0),
+                meal_type=meal_type,
+                calories=calories,
+                protein=protein,
+                carbs=carbs,
+                fat=fat,
+                price=price,
                 diet_tags=",".join(selected_diets),
             )
         except ValueError as error:
@@ -725,6 +737,12 @@ def edit_meal(meal_id):
                 "edit_meal.html",
                 meal=meal,
                 meal_name=name,
+                selected_meal_type=meal_type,
+                calories_value=calories,
+                protein_value=protein,
+                carbs_value=carbs,
+                fat_value=fat,
+                price_value=price,
                 selected_diets=selected_diets,
                 diets=db.get_diets(),
                 meal_types=db.get_meal_types(),

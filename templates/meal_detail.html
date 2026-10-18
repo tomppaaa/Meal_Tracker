@@ -3,8 +3,8 @@
 {% block title %}{{ meal.name }}{% endblock %}
 
 {% block content %}
-    <section class="meal-card">
-        <h2>{{ meal.name }}</h2>
+    <section class="meal-card meal-detail-card">
+        <h2 class="meal-title">{{ meal.name }}</h2>
         <p><strong>Type:</strong> {{ meal.meal_type }}</p>
         <p><strong>Calories:</strong> {{ meal.calories or 0 }} kcal</p>
         <p><strong>Protein:</strong> {{ meal.protein or 0 }} g</p>
@@ -13,7 +13,7 @@
         <p><strong>Price:</strong> €{{ meal.price or 0.0 }}</p>
 
         <section class="rating-section">
-            <h3>Rating</h3>
+            <h3>Rate this meal</h3>
             <p class="rating-summary">{{ ratings.average }}/5 stars ({{ ratings.count }} ratings)</p>
             {% if session.get('user_id') %}
                 {% if rating_error %}
@@ -45,59 +45,59 @@
             </div>
         {% endif %}
 
-        <section class="comments-section">
-            <h3>Comments</h3>
-
-            {% if session.get('user_id') %}
-                {% if comment_error %}
-                    <div class="form-error">{{ comment_error }}</div>
-                {% endif %}
-                <form action="/meal/{{ meal.id }}/comments" method="POST" class="comment-form">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <label for="comment">Add a comment:</label>
-                    <textarea id="comment" name="comment" rows="4" required>{{ comment_body or '' }}</textarea>
-                    <button type="submit">Post comment</button>
-                </form>
-            {% else %}
-                <p><a href="/login" class="action-link">Log in</a> to add a comment.</p>
-            {% endif %}
-
-            {% if comments %}
-                <div class="comments-list">
-                    {% for comment in comments %}
-                        <article class="comment" id="comment-{{ comment.id }}">
-                            <p class="comment-meta"><strong>{{ comment.author }}</strong> · {{ comment.created_at }}</p>
-                            <p>{{ comment.body }}</p>
-                            {% if session.get('user_id') == meal.user_id %}
-                                <details class="reply-details" {% if reply_error and reply_comment_id == comment.id %}open{% endif %}>
-                                    <summary>Reply</summary>
-                                    {% if reply_error and reply_comment_id == comment.id %}
-                                        <div class="form-error">{{ reply_error }}</div>
-                                    {% endif %}
-                                    <form action="/meal/{{ meal.id }}/comments/{{ comment.id }}/reply" method="POST" class="reply-form">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                        <label for="reply-{{ comment.id }}">Your reply</label>
-                                        <textarea id="reply-{{ comment.id }}" name="reply" rows="2">{% if reply_comment_id == comment.id %}{{ reply_body or '' }}{% endif %}</textarea>
-                                        <button type="submit">Post reply</button>
-                                    </form>
-                                </details>
-                            {% endif %}
-                            {% for reply in comments if reply.parent_comment_id == comment.id %}
-                                <article class="comment-reply" id="comment-{{ reply.id }}">
-                                    <p class="comment-meta"><strong>{{ reply.author }}</strong> · {{ reply.created_at }}</p>
-                                    <p>{{ reply.body }}</p>
-                                </article>
-                            {% endfor %}
-                        </article>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <p>No comments yet.</p>
-            {% endif %}
-        </section>
-
         <p>
             <a href="/" class="action-link">Back to home</a>
         </p>
+    </section>
+
+    <section class="meal-card comments-section">
+        <h2>Comments</h2>
+
+        {% if session.get('user_id') %}
+            {% if comment_error %}
+                <div class="form-error">{{ comment_error }}</div>
+            {% endif %}
+            <form action="/meal/{{ meal.id }}/comments" method="POST" class="comment-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <label for="comment">Add a comment:</label>
+                <textarea id="comment" name="comment" rows="4" required>{{ comment_body or '' }}</textarea>
+                <button type="submit">Post comment</button>
+            </form>
+        {% else %}
+            <p><a href="/login" class="action-link">Log in</a> to add a comment.</p>
+        {% endif %}
+
+        {% if comments %}
+            <div class="comments-list">
+                {% for comment in comments %}
+                    <article class="comment" id="comment-{{ comment.id }}">
+                        <p class="comment-meta"><strong>{{ comment.author }}</strong> · {{ comment.created_at }}</p>
+                        <p>{{ comment.body }}</p>
+                        {% if session.get('user_id') == meal.user_id %}
+                            <details class="reply-details" {% if reply_error and reply_comment_id == comment.id %}open{% endif %}>
+                                <summary>Reply</summary>
+                                {% if reply_error and reply_comment_id == comment.id %}
+                                    <div class="form-error">{{ reply_error }}</div>
+                                {% endif %}
+                                <form action="/meal/{{ meal.id }}/comments/{{ comment.id }}/reply" method="POST" class="reply-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <label for="reply-{{ comment.id }}">Your reply</label>
+                                    <textarea id="reply-{{ comment.id }}" name="reply" rows="2">{% if reply_comment_id == comment.id %}{{ reply_body or '' }}{% endif %}</textarea>
+                                    <button type="submit">Post reply</button>
+                                </form>
+                            </details>
+                        {% endif %}
+                        {% for reply in comments if reply.parent_comment_id == comment.id %}
+                            <article class="comment-reply" id="comment-{{ reply.id }}">
+                                <p class="comment-meta"><strong>{{ reply.author }}</strong> · {{ reply.created_at }}</p>
+                                <p>{{ reply.body }}</p>
+                            </article>
+                        {% endfor %}
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p>No comments yet.</p>
+        {% endif %}
     </section>
 {% endblock %}
