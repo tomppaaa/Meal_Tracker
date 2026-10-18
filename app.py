@@ -3,7 +3,7 @@ import math
 import secrets
 from urllib.parse import urlsplit
 
-from flask import Flask, flash, redirect, render_template, request, session
+from flask import Flask, abort, flash, redirect, render_template, request, session
 from werkzeug.exceptions import HTTPException
 
 import config
@@ -99,6 +99,15 @@ def limit_input_lengths():
                 "Input values cannot be longer than 10000 characters."
             )
     return None
+
+
+@app.before_request
+def reject_out_of_range_route_ids():
+    if request.view_args and any(
+        isinstance(value, int) and value > db.MAX_SQLITE_INTEGER
+        for value in request.view_args.values()
+    ):
+        abort(404)
 
 
 MAX_SEARCH_QUERY_LENGTH = 1000

@@ -2,6 +2,7 @@ import sqlite3
 from pathlib import Path
 from flask import g
 
+MAX_SQLITE_INTEGER = 2**63 - 1
 MAX_COMMENT_LENGTH = 1000
 
 

@@ -412,6 +412,31 @@ def test_create_and_update_meal_reject_long_meal_types():
             "Calories must be a valid number greater than or equal to 0.",
         ),
         (
+            "calories",
+            str(2**63),
+            "Calories must be a valid number greater than or equal to 0.",
+        ),
+        (
+            "protein",
+            "1e999",
+            "Protein must be a valid number greater than or equal to 0.",
+        ),
+        (
+            "carbs",
+            "1e999",
+            "Carbs must be a valid number greater than or equal to 0.",
+        ),
+        (
+            "fat",
+            "1e999",
+            "Fat must be a valid number greater than or equal to 0.",
+        ),
+        (
+            "price",
+            "1e999",
+            "Price must be a valid number greater than or equal to 0.",
+        ),
+        (
             "protein",
             "-0.1",
             "Protein must be a valid number greater than or equal to 0.",
@@ -500,6 +525,24 @@ def test_price_search_filters_reject_invalid_numbers(client, query_key, value):
         b"Price filters must be valid numbers greater than or equal to 0."
         in response.data
     )
+
+
+@pytest.mark.parametrize("query_key", ["min_price", "max_price"])
+def test_price_search_filters_reject_infinite_values(client, query_key):
+    response = client.get("/", query_string={query_key: "1e999"})
+
+    assert response.status_code == 200
+    assert (
+        b"Price filters must be valid numbers greater than or equal to 0."
+        in response.data
+    )
+
+
+def test_route_ids_larger_than_sqlite_integer_are_not_queried(client):
+    response = client.get(f"/meal/{2**63}", follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"The requested page or item could not be found." in response.data
 
 
 def test_oversized_input_is_rejected_globally(client):

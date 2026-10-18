@@ -31,7 +31,11 @@ def _validate_meal_number(field, value, integer=False):
             f"{label} must be a valid number greater than or equal to 0."
         ) from error
 
-    if number < 0 or (not integer and not math.isfinite(number)):
+    if (
+        number < 0
+        or (integer and number > db.MAX_SQLITE_INTEGER)
+        or (not integer and not math.isfinite(number))
+    ):
         raise ValueError(f"{label} must be a valid number greater than or equal to 0.")
     return number
 
