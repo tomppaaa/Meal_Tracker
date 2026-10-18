@@ -15,6 +15,10 @@ app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
 
+MAX_TEXT_INPUT_LENGTH = 10000
+MAX_SEARCH_QUERY_LENGTH = 1000
+MAX_MESSAGE_LENGTH = 1000
+
 
 def redirect_with_error(message, fallback="/"):
     flash(message, "error")
@@ -28,6 +32,37 @@ def redirect_with_error(message, fallback="/"):
         ):
             return redirect(referrer)
     return redirect(fallback)
+
+
+def parse_price_filter(value):
+    if not value:
+        return None
+    try:
+        price = float(value)
+    except ValueError as error:
+        raise ValueError(
+            "Price filters must be valid numbers greater than or equal to 0."
+        ) from error
+    if not math.isfinite(price) or price < 0:
+        raise ValueError(
+            "Price filters must be valid numbers greater than or equal to 0."
+        )
+    return price
+
+
+def render_form_with_errors(template_name, errors=None, **context):
+    return render_template(template_name, errors=errors or [], **context)
+
+
+def validate_required_fields(payload, rules):
+    errors = []
+    for field_name, message in rules.items():
+        value = payload.get(field_name, "")
+        if isinstance(value, str):
+            value = value.strip()
+        if not value:
+            errors.append(message)
+    return errors
 
 
 @app.errorhandler(HTTPException)
@@ -46,27 +81,6 @@ def handle_internal_error(_error):
         "An unexpected error occurred. Please try again later.",
         fallback="/",
     )
-
-
-db.initialize_schema()
-
-MAX_TEXT_INPUT_LENGTH = 10000
-
-
-def get_csrf_token():
-    if "csrf_token" not in session:
-        session["csrf_token"] = secrets.token_urlsafe(32)
-    return session["csrf_token"]
-
-
-@app.context_processor
-def inject_csrf_token():
-    user_id = session.get("user_id")
-    unread_notifications = meals.get_unread_notification_count(user_id) if user_id else 0
-    return {
-        "csrf_token": get_csrf_token(),
-        "unread_notification_count": unread_notifications,
-    }
 
 
 @app.before_request
@@ -110,39 +124,23 @@ def reject_out_of_range_route_ids():
         abort(404)
 
 
-MAX_SEARCH_QUERY_LENGTH = 1000
-MAX_MESSAGE_LENGTH = 1000
+def get_csrf_token():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_urlsafe(32)
+    return session["csrf_token"]
 
 
-def parse_price_filter(value):
-    if not value:
-        return None
-    try:
-        price = float(value)
-    except ValueError as error:
-        raise ValueError(
-            "Price filters must be valid numbers greater than or equal to 0."
-        ) from error
-    if not math.isfinite(price) or price < 0:
-        raise ValueError(
-            "Price filters must be valid numbers greater than or equal to 0."
-        )
-    return price
+@app.context_processor
+def inject_csrf_token():
+    user_id = session.get("user_id")
+    unread_notifications = meals.get_unread_notification_count(user_id) if user_id else 0
+    return {
+        "csrf_token": get_csrf_token(),
+        "unread_notification_count": unread_notifications,
+    }
 
 
-def render_form_with_errors(template_name, errors=None, **context):
-    return render_template(template_name, errors=errors or [], **context)
-
-
-def validate_required_fields(payload, rules):
-    errors = []
-    for field_name, message in rules.items():
-        value = payload.get(field_name, "")
-        if isinstance(value, str):
-            value = value.strip()
-        if not value:
-            errors.append(message)
-    return errors
+db.initialize_schema()
 
 
 def build_profile_view(user_id, user=None):
@@ -313,62 +311,6 @@ def profile_settings():
     return render_form_with_errors("profile_settings.html", errors=[], user=user)
 
 
-@app.route("/profile/meals")
-def profile_meals():
-    user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
-
-    if not users.get_user_by_id(user_id):
-        session.pop("user_id", None)
-        session.pop("user_name", None)
-        return redirect("/login")
-
-    return redirect("/profile")
-
-
-@app.route("/notifications")
-@app.route("/messages")
-def messages():
-    user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
-    return render_template(
-        "messages.html", notifications=meals.get_notifications(user_id)
-    )
-
-
-@app.route("/notifications/<int:notification_id>/open")
-@app.route("/messages/<int:notification_id>/open")
-def open_notification(notification_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
-
-    notification = meals.get_notification_target(notification_id, user_id)
-    if not notification:
-        return redirect_with_error(
-            "That notification could not be found.", fallback="/messages"
-        )
-
-    meals.mark_notification_read(notification_id, user_id)
-    return redirect(
-        f"/meal/{notification['meal_id']}#comment-{notification['comment_id']}"
-    )
-
-
-@app.route("/user/<int:user_id>")
-def user_meals(user_id):
-    user = users.get_user_by_id(user_id)
-    if not user:
-        return redirect_with_error(
-            "That user's profile could not be found.", fallback="/"
-        )
-
-    user_meals = meals.get_meals_by_user(user_id)
-    return render_template("user_meals.html", user=user, meals=user_meals)
-
-
 @app.route("/profile/change-password", methods=["POST"])
 def change_password():
     user_id = session.get("user_id")
@@ -469,6 +411,32 @@ def delete_account():
     return redirect("/")
 
 
+@app.route("/profile/meals")
+def profile_meals():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+
+    if not users.get_user_by_id(user_id):
+        session.pop("user_id", None)
+        session.pop("user_name", None)
+        return redirect("/login")
+
+    return redirect("/profile")
+
+
+@app.route("/user/<int:user_id>")
+def user_meals(user_id):
+    user = users.get_user_by_id(user_id)
+    if not user:
+        return redirect_with_error(
+            "That user's profile could not be found.", fallback="/"
+        )
+
+    user_meals = meals.get_meals_by_user(user_id)
+    return render_template("user_meals.html", user=user, meals=user_meals)
+
+
 @app.route("/")
 def index():
     search_query = request.args.get("query", "").strip()
@@ -543,6 +511,84 @@ def show_form():
     )
 
 
+@app.route("/meals", methods=["POST"])
+@app.route("/add_meal", methods=["POST"])
+def add_meal():
+    user_id = session.get("user_id")
+    if not user_id:
+        return render_form_with_errors(
+            "meal.html",
+            errors=["You must be logged in to add a meal."],
+            diets=meals.get_diets(),
+            meal_types=meals.get_meal_types(),
+        )
+
+    name = request.form.get("name", "")
+    meal_type = request.form.get("meal_type", "")
+    calories = request.form.get("calories", 0)
+    protein = request.form.get("protein", 0)
+    carbs = request.form.get("carbs", 0)
+    fat = request.form.get("fat", 0)
+    price = request.form.get("price", 0)
+    selected_diets = request.form.getlist("diets")
+    diet_tags = ",".join(selected_diets)
+    errors = validate_required_fields(
+        {"name": name, "meal_type": meal_type},
+        {
+            "name": "Meal name is required.",
+            "meal_type": "Meal type is required.",
+        },
+    )
+    if len(name.strip()) > meals.MAX_MEAL_NAME_LENGTH:
+        errors.append("Meal name cannot be longer than 50 characters.")
+
+    if errors:
+        return render_form_with_errors(
+            "meal.html",
+            errors=errors,
+            diets=meals.get_diets(),
+            meal_types=meals.get_meal_types(),
+            meal_name=name,
+            meal_type_value=meal_type,
+            calories_value=calories,
+            protein_value=protein,
+            carbs_value=carbs,
+            fat_value=fat,
+            price_value=price,
+            selected_diets=selected_diets,
+        )
+
+    try:
+        meals.create_meal(
+            user_id=user_id,
+            name=name,
+            meal_type=meal_type,
+            calories=calories,
+            protein=protein,
+            carbs=carbs,
+            fat=fat,
+            price=price,
+            diet_tags=diet_tags,
+        )
+    except ValueError as error:
+        return render_form_with_errors(
+            "meal.html",
+            errors=[str(error)],
+            diets=meals.get_diets(),
+            meal_types=meals.get_meal_types(),
+            meal_name=name,
+            meal_type_value=meal_type,
+            calories_value=calories,
+            protein_value=protein,
+            carbs_value=carbs,
+            fat_value=fat,
+            price_value=price,
+            selected_diets=selected_diets,
+        )
+
+    return redirect("/")
+
+
 @app.route("/meals/<int:meal_id>")
 @app.route("/meal/<int:meal_id>")
 def meal_detail(meal_id):
@@ -560,6 +606,117 @@ def meal_detail(meal_id):
         rating_error=None,
         diets=meals.get_diets(),
     )
+
+
+@app.route("/meals/<int:meal_id>/edit", methods=["GET", "POST"])
+@app.route("/meal/<int:meal_id>/edit", methods=["GET", "POST"])
+def edit_meal(meal_id):
+    meal = meals.get_meal_by_id(meal_id)
+    if not meal:
+        return redirect_with_error("That meal could not be found.", fallback="/")
+
+    if session.get("user_id") != meal["user_id"]:
+        return redirect_with_error(
+            "Only the meal owner can edit this meal.",
+            fallback=f"/meal/{meal_id}",
+        )
+
+    if request.method == "POST":
+        name = request.form.get("name", "")
+        meal_type = request.form.get("meal_type", "")
+        calories = request.form.get("calories", meal["calories"] or 0)
+        protein = request.form.get("protein", meal["protein"] or 0)
+        carbs = request.form.get("carbs", meal["carbs"] or 0)
+        fat = request.form.get("fat", meal["fat"] or 0)
+        price = request.form.get("price", meal["price"] or 0)
+        selected_diets = request.form.getlist("diets")
+        try:
+            meals.update_meal(
+                meal_id,
+                name=name,
+                meal_type=meal_type,
+                calories=calories,
+                protein=protein,
+                carbs=carbs,
+                fat=fat,
+                price=price,
+                diet_tags=",".join(selected_diets),
+            )
+        except ValueError as error:
+            return render_template(
+                "edit_meal.html",
+                meal=meal,
+                meal_name=name,
+                selected_meal_type=meal_type,
+                calories_value=calories,
+                protein_value=protein,
+                carbs_value=carbs,
+                fat_value=fat,
+                price_value=price,
+                selected_diets=selected_diets,
+                diets=meals.get_diets(),
+                meal_types=meals.get_meal_types(),
+                errors=[str(error)],
+            )
+        return redirect("/")
+
+    selected_diets = [
+        diet_id.strip()
+        for diet_id in (meal.get("diet_tags") or "").split(",")
+        if diet_id.strip()
+    ]
+    return render_template(
+        "edit_meal.html",
+        meal=meal,
+        selected_diets=selected_diets,
+        diets=meals.get_diets(),
+        meal_types=meals.get_meal_types(),
+    )
+
+
+@app.route("/meals/<int:meal_id>/delete", methods=["POST"])
+@app.route("/meal/<int:meal_id>/delete", methods=["POST"])
+def delete_meal(meal_id):
+    meal = meals.get_meal_by_id(meal_id)
+    if not meal:
+        return redirect_with_error("That meal could not be found.", fallback="/")
+
+    if session.get("user_id") != meal["user_id"]:
+        return redirect_with_error(
+            "Only the meal owner can delete this meal.",
+            fallback=f"/meal/{meal_id}",
+        )
+
+    meals.delete_meal(meal_id)
+    return redirect("/")
+
+
+@app.route("/meals/<int:meal_id>/rating", methods=["POST"])
+@app.route("/meal/<int:meal_id>/rating", methods=["POST"])
+def rate_meal(meal_id):
+    meal = meals.get_meal_by_id(meal_id)
+    if not meal:
+        return redirect_with_error("That meal could not be found.", fallback="/")
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+
+    try:
+        rating = int(request.form.get("rating", ""))
+        meals.save_meal_rating(meal_id, user_id, rating)
+    except (TypeError, ValueError):
+        return render_template(
+            "meal_detail.html",
+            meal=meal,
+            comments=meals.get_meal_comments(meal_id),
+            comment_error=None,
+            ratings=meals.get_meal_rating_summary(meal_id, user_id),
+            rating_error="Choose a rating from 1 to 5 stars.",
+            diets=meals.get_diets(),
+        )
+
+    return redirect(f"/meal/{meal_id}")
 
 
 @app.route("/meals/<int:meal_id>/comments", methods=["POST"])
@@ -672,194 +829,35 @@ def reply_to_meal_comment(meal_id, comment_id):
     return redirect(f"/meal/{meal_id}")
 
 
-@app.route("/meals/<int:meal_id>/rating", methods=["POST"])
-@app.route("/meal/<int:meal_id>/rating", methods=["POST"])
-def rate_meal(meal_id):
-    meal = meals.get_meal_by_id(meal_id)
-    if not meal:
-        return redirect_with_error("That meal could not be found.", fallback="/")
+@app.route("/notifications")
+@app.route("/messages")
+def messages():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+    return render_template(
+        "messages.html", notifications=meals.get_notifications(user_id)
+    )
 
+
+@app.route("/notifications/<int:notification_id>/open")
+@app.route("/messages/<int:notification_id>/open")
+def open_notification(notification_id):
     user_id = session.get("user_id")
     if not user_id:
         return redirect("/login")
 
-    try:
-        rating = int(request.form.get("rating", ""))
-        meals.save_meal_rating(meal_id, user_id, rating)
-    except (TypeError, ValueError):
-        return render_template(
-            "meal_detail.html",
-            meal=meal,
-            comments=meals.get_meal_comments(meal_id),
-            comment_error=None,
-            ratings=meals.get_meal_rating_summary(meal_id, user_id),
-            rating_error="Choose a rating from 1 to 5 stars.",
-            diets=meals.get_diets(),
-        )
-
-    return redirect(f"/meal/{meal_id}")
-
-
-@app.route("/meals/<int:meal_id>/edit", methods=["GET", "POST"])
-@app.route("/meal/<int:meal_id>/edit", methods=["GET", "POST"])
-def edit_meal(meal_id):
-    meal = meals.get_meal_by_id(meal_id)
-    if not meal:
-        return redirect_with_error("That meal could not be found.", fallback="/")
-
-    if session.get("user_id") != meal["user_id"]:
+    notification = meals.get_notification_target(notification_id, user_id)
+    if not notification:
         return redirect_with_error(
-            "Only the meal owner can edit this meal.",
-            fallback=f"/meal/{meal_id}",
+            "That notification could not be found.", fallback="/messages"
         )
 
-    if request.method == "POST":
-        name = request.form.get("name", "")
-        meal_type = request.form.get("meal_type", "")
-        calories = request.form.get("calories", meal["calories"] or 0)
-        protein = request.form.get("protein", meal["protein"] or 0)
-        carbs = request.form.get("carbs", meal["carbs"] or 0)
-        fat = request.form.get("fat", meal["fat"] or 0)
-        price = request.form.get("price", meal["price"] or 0)
-        selected_diets = request.form.getlist("diets")
-        try:
-            meals.update_meal(
-                meal_id,
-                name=name,
-                meal_type=meal_type,
-                calories=calories,
-                protein=protein,
-                carbs=carbs,
-                fat=fat,
-                price=price,
-                diet_tags=",".join(selected_diets),
-            )
-        except ValueError as error:
-            return render_template(
-                "edit_meal.html",
-                meal=meal,
-                meal_name=name,
-                selected_meal_type=meal_type,
-                calories_value=calories,
-                protein_value=protein,
-                carbs_value=carbs,
-                fat_value=fat,
-                price_value=price,
-                selected_diets=selected_diets,
-                diets=meals.get_diets(),
-                meal_types=meals.get_meal_types(),
-                errors=[str(error)],
-            )
-        return redirect("/")
-
-    selected_diets = [
-        diet_id.strip()
-        for diet_id in (meal.get("diet_tags") or "").split(",")
-        if diet_id.strip()
-    ]
-    return render_template(
-        "edit_meal.html",
-        meal=meal,
-        selected_diets=selected_diets,
-        diets=meals.get_diets(),
-        meal_types=meals.get_meal_types(),
+    meals.mark_notification_read(notification_id, user_id)
+    return redirect(
+        f"/meal/{notification['meal_id']}#comment-{notification['comment_id']}"
     )
 
-
-@app.route("/meals/<int:meal_id>/delete", methods=["POST"])
-@app.route("/meal/<int:meal_id>/delete", methods=["POST"])
-def delete_meal(meal_id):
-    meal = meals.get_meal_by_id(meal_id)
-    if not meal:
-        return redirect_with_error("That meal could not be found.", fallback="/")
-
-    if session.get("user_id") != meal["user_id"]:
-        return redirect_with_error(
-            "Only the meal owner can delete this meal.",
-            fallback=f"/meal/{meal_id}",
-        )
-
-    meals.delete_meal(meal_id)
-    return redirect("/")
-
-
-# Handle a POST request that creates a meal.
-@app.route("/meals", methods=["POST"])
-@app.route("/add_meal", methods=["POST"])
-def add_meal():
-    user_id = session.get("user_id")
-    if not user_id:
-        return render_form_with_errors(
-            "meal.html",
-            errors=["You must be logged in to add a meal."],
-            diets=meals.get_diets(),
-            meal_types=meals.get_meal_types(),
-        )
-
-    name = request.form.get("name", "")
-    meal_type = request.form.get("meal_type", "")
-    calories = request.form.get("calories", 0)
-    protein = request.form.get("protein", 0)
-    carbs = request.form.get("carbs", 0)
-    fat = request.form.get("fat", 0)
-    price = request.form.get("price", 0)
-    selected_diets = request.form.getlist("diets")
-    diet_tags = ",".join(selected_diets)
-    errors = validate_required_fields(
-        {"name": name, "meal_type": meal_type},
-        {
-            "name": "Meal name is required.",
-            "meal_type": "Meal type is required.",
-        },
-    )
-    if len(name.strip()) > meals.MAX_MEAL_NAME_LENGTH:
-        errors.append("Meal name cannot be longer than 50 characters.")
-
-    if errors:
-        return render_form_with_errors(
-            "meal.html",
-            errors=errors,
-            diets=meals.get_diets(),
-            meal_types=meals.get_meal_types(),
-            meal_name=name,
-            meal_type_value=meal_type,
-            calories_value=calories,
-            protein_value=protein,
-            carbs_value=carbs,
-            fat_value=fat,
-            price_value=price,
-            selected_diets=selected_diets,
-        )
-
-    try:
-        meal_id = meals.create_meal(
-            user_id=user_id,
-            name=name,
-            meal_type=meal_type,
-            calories=calories,
-            protein=protein,
-            carbs=carbs,
-            fat=fat,
-            price=price,
-            diet_tags=diet_tags,
-        )
-    except ValueError as error:
-        return render_form_with_errors(
-            "meal.html",
-            errors=[str(error)],
-            diets=meals.get_diets(),
-            meal_types=meals.get_meal_types(),
-            meal_name=name,
-            meal_type_value=meal_type,
-            calories_value=calories,
-            protein_value=protein,
-            carbs_value=carbs,
-            fat_value=fat,
-            price_value=price,
-            selected_diets=selected_diets,
-        )
-
-    return redirect("/")
 
 if __name__ == "__main__":
     app.run(debug=True)

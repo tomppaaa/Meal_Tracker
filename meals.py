@@ -289,6 +289,58 @@ def delete_meal(meal_id):
     return True
 
 
+def get_meal_types():
+    return db.query("SELECT id, name FROM meal_types ORDER BY id")
+
+
+def get_diets():
+    return db.query("SELECT id, name FROM diets ORDER BY id")
+
+
+def get_meal_rating_summary(meal_id, user_id=None):
+    summary = db.query(
+        """
+        SELECT ROUND(AVG(rating), 1) AS average_rating, COUNT(*) AS rating_count
+        FROM meal_ratings
+        WHERE meal_id = ?
+        """,
+        (meal_id,),
+    )[0]
+    user_rating = None
+    if user_id:
+        rows = db.query(
+            """
+            SELECT rating
+            FROM meal_ratings
+            WHERE meal_id = ? AND user_id = ?
+            """,
+            (meal_id, user_id),
+        )
+        user_rating = rows[0]["rating"] if rows else None
+
+    return {
+        "average": summary["average_rating"] or 0,
+        "count": summary["rating_count"],
+        "user_rating": user_rating,
+    }
+
+
+def save_meal_rating(meal_id, user_id, rating):
+    if rating not in range(1, 6):
+        raise ValueError("Rating must be between 1 and 5.")
+
+    db.execute(
+        """
+        INSERT INTO meal_ratings (meal_id, user_id, rating)
+        VALUES (?, ?, ?)
+        ON CONFLICT(meal_id, user_id) DO UPDATE SET
+            rating = excluded.rating,
+            created_at = CURRENT_TIMESTAMP
+        """,
+        (meal_id, user_id, rating),
+    )
+
+
 def get_meal_comments(meal_id):
     return db.query(
         """
@@ -306,15 +358,6 @@ def get_meal_comments(meal_id):
         """,
         (meal_id,),
     )
-
-
-def get_meal_types():
-    return db.query("SELECT id, name FROM meal_types ORDER BY id")
-
-
-def get_diets():
-    return db.query("SELECT id, name FROM diets ORDER BY id")
-
 
 def get_meal_comment_target(comment_id, meal_id):
     rows = db.query(
@@ -419,50 +462,6 @@ def mark_notification_read(notification_id, user_id):
         WHERE id = ? AND user_id = ?
         """,
         (notification_id, user_id),
-    )
-
-
-def get_meal_rating_summary(meal_id, user_id=None):
-    summary = db.query(
-        """
-        SELECT ROUND(AVG(rating), 1) AS average_rating, COUNT(*) AS rating_count
-        FROM meal_ratings
-        WHERE meal_id = ?
-        """,
-        (meal_id,),
-    )[0]
-    user_rating = None
-    if user_id:
-        rows = db.query(
-            """
-            SELECT rating
-            FROM meal_ratings
-            WHERE meal_id = ? AND user_id = ?
-            """,
-            (meal_id, user_id),
-        )
-        user_rating = rows[0]["rating"] if rows else None
-
-    return {
-        "average": summary["average_rating"] or 0,
-        "count": summary["rating_count"],
-        "user_rating": user_rating,
-    }
-
-
-def save_meal_rating(meal_id, user_id, rating):
-    if rating not in range(1, 6):
-        raise ValueError("Rating must be between 1 and 5.")
-
-    db.execute(
-        """
-        INSERT INTO meal_ratings (meal_id, user_id, rating)
-        VALUES (?, ?, ?)
-        ON CONFLICT(meal_id, user_id) DO UPDATE SET
-            rating = excluded.rating,
-            created_at = CURRENT_TIMESTAMP
-        """,
-        (meal_id, user_id, rating),
     )
 
 

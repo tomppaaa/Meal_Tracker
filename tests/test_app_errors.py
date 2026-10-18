@@ -80,6 +80,48 @@ def test_csrf_token_is_required_and_rotated_after_login(client):
         users.delete_user(user["id"])
 
 
+def test_user_fields_reject_values_longer_than_their_limits():
+    with app.app_context():
+        with pytest.raises(
+            ValueError, match="Username cannot be longer than 50 characters"
+        ):
+            users.create_user("u" * 51, "secret123")
+
+        with pytest.raises(
+            ValueError, match="Password cannot be longer than 128 characters"
+        ):
+            users.create_user("long-password-user", "p" * 129)
+
+
+def test_user_passwords_are_hashed_when_created_and_updated():
+    with app.app_context():
+        username = "hashed-password-user"
+        existing = users.get_user_by_username(username)
+        if existing:
+            users.delete_user(existing["id"])
+
+        user_id = users.create_user(username, "initial-secret")
+        try:
+            user = users.get_user_by_id(user_id)
+            initial_hash = user["password_hash"]
+
+            assert initial_hash.startswith("scrypt:")
+            assert initial_hash != "initial-secret"
+            assert users.verify_user(username, "initial-secret")
+            assert users.verify_user(username, "wrong-secret") is None
+
+            users.update_password(user_id, "updated-secret")
+            updated_hash = users.get_user_by_id(user_id)["password_hash"]
+
+            assert updated_hash.startswith("scrypt:")
+            assert updated_hash != "updated-secret"
+            assert updated_hash != initial_hash
+            assert users.verify_user(username, "initial-secret") is None
+            assert users.verify_user(username, "updated-secret")
+        finally:
+            users.delete_user(user_id)
+
+
 def test_meal_type_search_filters_results(client):
     with app.app_context():
         username = "search-meal-type-user"
@@ -351,48 +393,6 @@ def test_meal_name_maximum_length_is_validated_before_insert(client):
         assert len(user_meals[0]["name"]) == 50
 
         users.delete_user(user_id)
-
-
-def test_user_fields_reject_values_longer_than_their_limits():
-    with app.app_context():
-        with pytest.raises(
-            ValueError, match="Username cannot be longer than 50 characters"
-        ):
-            users.create_user("u" * 51, "secret123")
-
-        with pytest.raises(
-            ValueError, match="Password cannot be longer than 128 characters"
-        ):
-            users.create_user("long-password-user", "p" * 129)
-
-
-def test_user_passwords_are_hashed_when_created_and_updated():
-    with app.app_context():
-        username = "hashed-password-user"
-        existing = users.get_user_by_username(username)
-        if existing:
-            users.delete_user(existing["id"])
-
-        user_id = users.create_user(username, "initial-secret")
-        try:
-            user = users.get_user_by_id(user_id)
-            initial_hash = user["password_hash"]
-
-            assert initial_hash.startswith("scrypt:")
-            assert initial_hash != "initial-secret"
-            assert users.verify_user(username, "initial-secret")
-            assert users.verify_user(username, "wrong-secret") is None
-
-            users.update_password(user_id, "updated-secret")
-            updated_hash = users.get_user_by_id(user_id)["password_hash"]
-
-            assert updated_hash.startswith("scrypt:")
-            assert updated_hash != "updated-secret"
-            assert updated_hash != initial_hash
-            assert users.verify_user(username, "initial-secret") is None
-            assert users.verify_user(username, "updated-secret")
-        finally:
-            users.delete_user(user_id)
 
 
 def test_create_and_update_meal_reject_long_meal_types():
