@@ -1,5 +1,7 @@
 # Meal Tracker
 
+Meal Tracker is a Flask application for sharing and managing meals. Users can create accounts, add meals, browse and search meals, and interact through comments and ratings. The application stores data in a local SQLite database.
+
 ## Application features
 
 * Users can create an account and sign in to the application.
