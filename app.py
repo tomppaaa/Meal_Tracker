@@ -1,24 +1,56 @@
 import hmac
 import math
 import secrets
+from urllib.parse import urlsplit
 
-from flask import Flask, redirect, render_template, request, session
+from flask import Flask, flash, redirect, render_template, request, session
+from werkzeug.exceptions import HTTPException
 
 import config
 import db
 import meals
 import users
-from errors import redirect_with_error, register_error_handlers
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
 
+
+def redirect_with_error(message, fallback="/"):
+    flash(message, "error")
+    referrer = request.referrer
+    if referrer:
+        referrer_parts = urlsplit(referrer)
+        request_host = urlsplit(request.host_url).netloc
+        if (
+            referrer_parts.scheme in ("http", "https")
+            and referrer_parts.netloc == request_host
+        ):
+            return redirect(referrer)
+    return redirect(fallback)
+
+
+@app.errorhandler(HTTPException)
+def handle_http_error(error):
+    error_messages = {
+        404: "The requested page or item could not be found.",
+        405: "That action is not available on this page.",
+        413: "The submitted information is too large.",
+    }
+    return redirect_with_error(error_messages.get(error.code, error.description))
+
+
+@app.errorhandler(500)
+def handle_internal_error(_error):
+    return redirect_with_error(
+        "An unexpected error occurred. Please try again later.",
+        fallback="/",
+    )
+
+
 db.ensure_meals_schema()
 
 MAX_TEXT_INPUT_LENGTH = 10000
-
-register_error_handlers(app)
 
 
 def get_csrf_token():
