@@ -1,4 +1,5 @@
 import math
+from decimal import Decimal, InvalidOperation
 
 import db
 
@@ -26,19 +27,62 @@ def _validate_meal_number(field, value, integer=False):
         value = 0
 
     try:
-        number = int(value) if integer else float(value)
-    except (TypeError, ValueError, OverflowError) as error:
+        if integer:
+            number = Decimal(str(value).strip())
+            if (
+                not number.is_finite()
+                or number < 0
+                or number != number.to_integral_value()
+                or number > db.MAX_SQLITE_INTEGER
+            ):
+                raise ValueError
+            return int(number)
+        number = float(value)
+    except (InvalidOperation, TypeError, ValueError, OverflowError) as error:
         raise ValueError(
             f"{label} must be a valid number greater than or equal to 0."
         ) from error
 
-    if (
-        number < 0
-        or (integer and number > db.MAX_SQLITE_INTEGER)
-        or (not integer and not math.isfinite(number))
-    ):
+    if number < 0 or not math.isfinite(number):
         raise ValueError(f"{label} must be a valid number greater than or equal to 0.")
     return number
+
+
+def _validate_meal_type(meal_type):
+    if not isinstance(meal_type, str):
+        raise ValueError("Select a valid meal type.")
+    meal_type = (meal_type or "").strip()
+    if not meal_type:
+        raise ValueError("Meal type cannot be empty.")
+    if len(meal_type) > MAX_MEAL_TYPE_LENGTH:
+        raise ValueError("Meal type cannot be longer than 50 characters.")
+
+    available_types = {row["name"] for row in get_meal_types()}
+    if meal_type not in available_types:
+        raise ValueError("Select a valid meal type.")
+    return meal_type
+
+
+def _normalize_diet_tags(diet_tags):
+    if diet_tags is None or diet_tags == "":
+        return ""
+    if not isinstance(diet_tags, str):
+        raise ValueError("Select valid diet categories.")
+
+    available_diet_ids = {str(row["id"]) for row in get_diets()}
+    normalized_ids = []
+    for value in diet_tags.split(","):
+        value = value.strip()
+        try:
+            diet_id = int(value)
+        except ValueError as error:
+            raise ValueError("Select valid diet categories.") from error
+        normalized_id = str(diet_id)
+        if diet_id < 1 or normalized_id not in available_diet_ids:
+            raise ValueError("Select valid diet categories.")
+        if normalized_id not in normalized_ids:
+            normalized_ids.append(normalized_id)
+    return ",".join(normalized_ids)
 
 
 def create_meal(
@@ -58,17 +102,14 @@ def create_meal(
         raise ValueError("User id is required.")
 
     name = _normalize_meal_name(name)
-    meal_type = (meal_type or "").strip()
-    if not meal_type:
-        raise ValueError("Meal type cannot be empty.")
-    if len(meal_type) > MAX_MEAL_TYPE_LENGTH:
-        raise ValueError("Meal type cannot be longer than 50 characters.")
+    meal_type = _validate_meal_type(meal_type)
 
     calories = _validate_meal_number("calories", calories, integer=True)
     protein = _validate_meal_number("protein", protein)
     carbs = _validate_meal_number("carbs", carbs)
     fat = _validate_meal_number("fat", fat)
     price = _validate_meal_number("price", price)
+    diet_tags = _normalize_diet_tags(diet_tags)
 
     db.execute(
         """
@@ -262,11 +303,9 @@ def update_meal(meal_id, **fields):
         if key == "name":
             value = _normalize_meal_name(value)
         elif key == "meal_type":
-            value = (value or "").strip()
-            if not value:
-                raise ValueError("Meal type cannot be empty.")
-            if len(value) > MAX_MEAL_TYPE_LENGTH:
-                raise ValueError("Meal type cannot be longer than 50 characters.")
+            value = _validate_meal_type(value)
+        elif key == "diet_tags":
+            value = _normalize_diet_tags(value)
         if key in {"calories", "protein", "carbs", "fat", "price"}:
             value = _validate_meal_number(key, value, integer=key == "calories")
         updates.append(f"{key} = ?")

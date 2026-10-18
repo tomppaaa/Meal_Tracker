@@ -484,12 +484,21 @@ def index():
     max_price = request.args.get("max_price", "").strip()
     selected_diets = request.args.getlist("diets")
     selected_meal_types = request.args.getlist("meal_types")
+    min_price_value = None
+    max_price_value = None
 
     try:
         min_price_value = parse_price_filter(min_price)
         max_price_value = parse_price_filter(max_price)
     except ValueError as error:
         errors.append(str(error))
+
+    if (
+        min_price_value is not None
+        and max_price_value is not None
+        and min_price_value > max_price_value
+    ):
+        errors.append("Minimum price cannot be greater than maximum price.")
 
     if errors:
         meal_rows = []
@@ -528,11 +537,16 @@ def form():
 @app.route("/result", methods=["POST"])
 def result():
     user_message = request.form.get("message", "")
+    errors = []
+    if not user_message.strip():
+        errors.append("Message cannot be empty.")
     if len(user_message) > MAX_MESSAGE_LENGTH:
+        errors.append("Message cannot be longer than 1000 characters.")
+    if errors:
         return (
             render_form_with_errors(
                 "message_form.html",
-                errors=["Message cannot be longer than 1000 characters."],
+                errors=errors,
                 message=user_message,
             ),
             400,

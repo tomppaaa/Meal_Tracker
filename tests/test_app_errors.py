@@ -421,6 +421,54 @@ def test_create_and_update_meal_reject_long_meal_types():
 @pytest.mark.parametrize(
     ("field", "value", "expected_error"),
     [
+        ("meal_type", "Unknown type", "Select a valid meal type."),
+        ("diet_tags", "999", "Select valid diet categories."),
+        (
+            "calories",
+            1.5,
+            "Calories must be a valid number greater than or equal to 0.",
+        ),
+    ],
+)
+def test_meal_model_rejects_invalid_types_diets_and_fractional_calories(
+    field, value, expected_error
+):
+    with app.app_context():
+        username = "meal-model-validation-user"
+        existing_user = users.get_user_by_username(username)
+        if existing_user:
+            users.delete_user(existing_user["id"])
+        user_id = users.create_user(username, "secret123")
+        meal_id = meals.create_meal(
+            user_id=user_id,
+            name="Existing validated meal",
+            meal_type="Dinner",
+            diet_tags="1",
+            calories=200,
+        )
+        meal_data = {
+            "user_id": user_id,
+            "name": "Invalid validated meal",
+            "meal_type": "Dinner",
+            field: value,
+        }
+
+        with pytest.raises(ValueError, match=expected_error):
+            meals.create_meal(**meal_data)
+        with pytest.raises(ValueError, match=expected_error):
+            meals.update_meal(meal_id, **{field: value})
+
+        meal = meals.get_meal_by_id(meal_id)
+        assert meal["meal_type"] == "Dinner"
+        assert meal["diet_tags"] == "1"
+        assert meal["calories"] == 200
+        assert len(meals.get_meals_by_user(user_id)) == 1
+        users.delete_user(user_id)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_error"),
+    [
         (
             "calories",
             "-1",
@@ -521,6 +569,18 @@ def test_oversized_search_and_message_are_rejected(client):
     assert b"Message cannot be longer than 1000 characters." in message_response.data
     assert b"m" * 1001 in message_response.data
     assert b"Message sent" not in message_response.data
+
+
+@pytest.mark.parametrize("message", ["", "   "])
+def test_empty_message_is_rejected(client, message):
+    response = client.post(
+        "/result",
+        data=csrf_data(client, {"message": message}),
+    )
+
+    assert response.status_code == 400
+    assert b"Message cannot be empty." in response.data
+    assert b"Message sent" not in response.data
 
 
 def test_message_is_escaped_when_rendered(client):
@@ -652,6 +712,14 @@ def test_add_meal_route_rejects_name_longer_than_50_characters(client):
     with app.app_context():
         assert meals.get_meals_by_user(user_id) == []
         users.delete_user(user_id)
+
+
+def test_price_search_rejects_minimum_greater_than_maximum(client):
+    response = client.get("/", query_string={"min_price": "10", "max_price": "5"})
+
+    assert response.status_code == 200
+    assert b"Minimum price cannot be greater than maximum price." in response.data
+    assert b"No meals found." in response.data
 
 
 @pytest.mark.parametrize(
@@ -806,6 +874,44 @@ def test_edit_meal_validation_error_preserves_selected_diets(client):
 
     with app.app_context():
         assert meals.get_meal_by_id(meal_id)["diet_tags"] == "1"
+        users.delete_user(user_id)
+
+
+@pytest.mark.parametrize("route", ["add", "edit"])
+@pytest.mark.parametrize(
+    ("field", "value", "expected_error"),
+    [
+        ("meal_type", "Unknown type", "Select a valid meal type."),
+        ("diets", ["999"], "Select valid diet categories."),
+    ],
+)
+def test_meal_routes_reject_unavailable_types_and_diets(
+    client, route, field, value, expected_error
+):
+    with app.app_context():
+        username = "meal-route-validation-user"
+        existing_user = users.get_user_by_username(username)
+        if existing_user:
+            users.delete_user(existing_user["id"])
+        user_id = users.create_user(username, "secret123")
+        meal_id = meals.create_meal(
+            user_id=user_id, name="Route validation meal", meal_type="Dinner"
+        )
+
+    with client.session_transaction() as session:
+        session["user_id"] = user_id
+
+    form_data = {"name": "Route validation meal", "meal_type": "Dinner", field: value}
+    path = "/add_meal" if route == "add" else f"/meal/{meal_id}/edit"
+    response = client.post(path, data=csrf_data(client, form_data))
+
+    assert response.status_code == 200
+    assert expected_error.encode() in response.data
+    with app.app_context():
+        assert len(meals.get_meals_by_user(user_id)) == 1
+        meal = meals.get_meal_by_id(meal_id)
+        assert meal["meal_type"] == "Dinner"
+        assert meal["diet_tags"] == ""
         users.delete_user(user_id)
 
 
