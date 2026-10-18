@@ -95,7 +95,7 @@ def test_diet_schema_initialization_preserves_existing_diets():
             (99, "Custom diet"),
         )
 
-        db.ensure_meals_schema()
+        db.initialize_schema()
 
         diets = {
             diet["id"]: diet["name"] for diet in db.query("SELECT id, name FROM diets")
@@ -114,9 +114,9 @@ def test_meal_type_schema_initialization_preserves_existing_types(client):
             (99, "Brunch"),
         )
 
-        db.ensure_meals_schema()
+        db.initialize_schema()
 
-        meal_types = {item["id"]: item["name"] for item in db.get_meal_types()}
+        meal_types = {item["id"]: item["name"] for item in meals.get_meal_types()}
         assert meal_types == {
             1: "Breakfast",
             2: "Lunch",
@@ -130,9 +130,27 @@ def test_meal_type_schema_initialization_preserves_existing_types(client):
     add_meal_response = client.get("/meal")
     assert b"Breakfast" in add_meal_response.data
     assert b"Evening meal" in add_meal_response.data
-
     search_response = client.get("/")
     assert b'name="meal_types" value="Breakfast"' in search_response.data
+
+
+def test_init_sql_defines_the_current_application_schema(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        db.initialize_schema()
+
+        expected_columns = {
+            "meals": {"diet_tags"},
+            "meal_comments": {"parent_comment_id", "commenter_user_id"},
+            "meal_ratings": {"meal_id", "user_id", "rating"},
+            "notifications": {"actor_user_id", "notification_type", "is_read"},
+        }
+        for table_name, required_columns in expected_columns.items():
+            columns = {
+                row["name"]
+                for row in db.query(f"PRAGMA table_info({table_name})")
+            }
+            assert required_columns <= columns
 
 
 def test_profile_shows_statistics_by_type_and_diet_and_legacy_stats_url_redirects(
@@ -823,7 +841,7 @@ def test_meal_comments_can_be_added_and_empty_comments_are_rejected(client):
     assert b"meal-comment-user" in response.data
 
     with app.app_context():
-        comments = db.get_meal_comments(meal_id)
+        comments = meals.get_meal_comments(meal_id)
         assert len(comments) == 1
         assert comments[0]["body"] == "Tasty and easy to make."
         users.delete_user(user_id)
@@ -842,7 +860,7 @@ def test_only_meal_owner_can_reply_to_comments(client):
         meal_id = meals.create_meal(
             user_id=owner_id, name="Reply meal", meal_type="Lunch"
         )
-        comment_id = db.add_meal_comment(
+        comment_id = meals.add_meal_comment(
             meal_id, commenter_name, "Please share the recipe."
         )
 
@@ -915,7 +933,7 @@ def test_opening_comment_and_reply_messages_marks_them_read(client):
     assert comment_response.status_code == 302
 
     with app.app_context():
-        notifications = db.get_notifications(owner_id)
+        notifications = meals.get_notifications(owner_id)
         assert len(notifications) == 1
         assert notifications[0]["notification_type"] == "new_comment"
         assert notifications[0]["is_read"] == 0
@@ -928,7 +946,7 @@ def test_opening_comment_and_reply_messages_marks_them_read(client):
     assert unauthorized_open_response.status_code == 200
     assert b"That notification could not be found." in unauthorized_open_response.data
     with app.app_context():
-        assert db.get_unread_notification_count(owner_id) == 1
+        assert meals.get_unread_notification_count(owner_id) == 1
 
     with client.session_transaction() as session:
         session["user_id"] = owner_id
@@ -946,7 +964,7 @@ def test_opening_comment_and_reply_messages_marks_them_read(client):
         f"/meal/{meal_id}#comment-{comment_id}"
     )
     with app.app_context():
-        assert db.get_unread_notification_count(owner_id) == 0
+        assert meals.get_unread_notification_count(owner_id) == 0
 
     reply_response = client.post(
         f"/meal/{meal_id}/comments/{comment_id}/reply",
@@ -963,7 +981,7 @@ def test_opening_comment_and_reply_messages_marks_them_read(client):
     assert b"replied to your comment" in reply_inbox_response.data
     assert b"Messages (1)" in reply_inbox_response.data
     with app.app_context():
-        reply_notifications = db.get_notifications(commenter_id)
+        reply_notifications = meals.get_notifications(commenter_id)
         assert len(reply_notifications) == 1
         assert reply_notifications[0]["notification_type"] == "comment_reply"
         assert reply_notifications[0]["is_read"] == 0
@@ -974,7 +992,7 @@ def test_opening_comment_and_reply_messages_marks_them_read(client):
         f"/meal/{meal_id}#comment-{reply_notifications[0]['comment_id']}"
     )
     with app.app_context():
-        assert db.get_unread_notification_count(commenter_id) == 0
+        assert meals.get_unread_notification_count(commenter_id) == 0
         users.delete_user(owner_id)
         users.delete_user(commenter_id)
 
@@ -1012,7 +1030,7 @@ def test_meal_rating_can_be_saved_and_updated(client):
 
     client.post(f"/meal/{meal_id}/rating", data=csrf_data(client, {"rating": "5"}))
     with app.app_context():
-        rating = db.get_meal_rating_summary(meal_id, user_id)
+        rating = meals.get_meal_rating_summary(meal_id, user_id)
         assert rating["average"] == 5.0
         assert rating["count"] == 1
         assert rating["user_rating"] == 5
@@ -1044,8 +1062,8 @@ def test_homepage_displays_current_meal_rating_summary(client):
             name="Homepage unrated meal",
             meal_type="Lunch",
         )
-        db.save_meal_rating(rated_meal_id, voter_one_id, 3)
-        db.save_meal_rating(rated_meal_id, voter_two_id, 5)
+        meals.save_meal_rating(rated_meal_id, voter_one_id, 3)
+        meals.save_meal_rating(rated_meal_id, voter_two_id, 5)
         added_at = meals.get_meal_by_id(rated_meal_id)["created_at"]
 
     response = client.get("/")

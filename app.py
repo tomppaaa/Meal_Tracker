@@ -48,7 +48,7 @@ def handle_internal_error(_error):
     )
 
 
-db.ensure_meals_schema()
+db.initialize_schema()
 
 MAX_TEXT_INPUT_LENGTH = 10000
 
@@ -62,7 +62,7 @@ def get_csrf_token():
 @app.context_processor
 def inject_csrf_token():
     user_id = session.get("user_id")
-    unread_notifications = db.get_unread_notification_count(user_id) if user_id else 0
+    unread_notifications = meals.get_unread_notification_count(user_id) if user_id else 0
     return {
         "csrf_token": get_csrf_token(),
         "unread_notification_count": unread_notifications,
@@ -159,7 +159,7 @@ def build_profile_view(user_id, user=None):
 
 def build_meal_statistics(user_id):
     user_meals = meals.get_meals_by_user(user_id)
-    diet_names = {str(diet["id"]): diet["name"] for diet in db.get_diets()}
+    diet_names = {str(diet["id"]): diet["name"] for diet in meals.get_diets()}
 
     def summarize(meal_list):
         count = len(meal_list)
@@ -333,7 +333,9 @@ def messages():
     user_id = session.get("user_id")
     if not user_id:
         return redirect("/login")
-    return render_template("messages.html", notifications=db.get_notifications(user_id))
+    return render_template(
+        "messages.html", notifications=meals.get_notifications(user_id)
+    )
 
 
 @app.route("/notifications/<int:notification_id>/open")
@@ -343,13 +345,13 @@ def open_notification(notification_id):
     if not user_id:
         return redirect("/login")
 
-    notification = db.get_notification_target(notification_id, user_id)
+    notification = meals.get_notification_target(notification_id, user_id)
     if not notification:
         return redirect_with_error(
             "That notification could not be found.", fallback="/messages"
         )
 
-    db.mark_notification_read(notification_id, user_id)
+    meals.mark_notification_read(notification_id, user_id)
     return redirect(
         f"/meal/{notification['meal_id']}#comment-{notification['comment_id']}"
     )
@@ -494,13 +496,13 @@ def index():
             selected_diets,
             selected_meal_types,
         )
-    diets = db.get_diets()
+    diets = meals.get_diets()
     return render_template(
         "index.html",
         errors=errors,
         meals=meal_rows,
         all_diets=diets,
-        all_meal_types=db.get_meal_types(),
+        all_meal_types=meals.get_meal_types(),
         selected_diets=selected_diets,
         selected_meal_types=selected_meal_types,
         query=search_query,
@@ -537,7 +539,7 @@ def result():
 @app.route("/meal")
 def show_form():
     return render_template(
-        "meal.html", diets=db.get_diets(), meal_types=db.get_meal_types()
+        "meal.html", diets=meals.get_diets(), meal_types=meals.get_meal_types()
     )
 
 
@@ -547,8 +549,8 @@ def meal_detail(meal_id):
     meal = meals.get_meal_by_id(meal_id)
     if not meal:
         return redirect_with_error("That meal could not be found.", fallback="/")
-    comments = db.get_meal_comments(meal_id)
-    ratings = db.get_meal_rating_summary(meal_id, session.get("user_id"))
+    comments = meals.get_meal_comments(meal_id)
+    ratings = meals.get_meal_rating_summary(meal_id, session.get("user_id"))
     return render_template(
         "meal_detail.html",
         meal=meal,
@@ -556,7 +558,7 @@ def meal_detail(meal_id):
         comment_error=None,
         ratings=ratings,
         rating_error=None,
-        diets=db.get_diets(),
+        diets=meals.get_diets(),
     )
 
 
@@ -575,32 +577,32 @@ def add_meal_comment(meal_id):
         return render_template(
             "meal_detail.html",
             meal=meal,
-            comments=db.get_meal_comments(meal_id),
+            comments=meals.get_meal_comments(meal_id),
             comment_error="Comment cannot be empty.",
             comment_body=comment_body,
-            ratings=db.get_meal_rating_summary(meal_id, session.get("user_id")),
+            ratings=meals.get_meal_rating_summary(meal_id, session.get("user_id")),
             rating_error=None,
-            diets=db.get_diets(),
+            diets=meals.get_diets(),
         )
     if len(comment_body) > 1000:
         return render_template(
             "meal_detail.html",
             meal=meal,
-            comments=db.get_meal_comments(meal_id),
+            comments=meals.get_meal_comments(meal_id),
             comment_error="Comment cannot be longer than 1000 characters.",
             comment_body=comment_body,
-            ratings=db.get_meal_rating_summary(meal_id, session.get("user_id")),
+            ratings=meals.get_meal_rating_summary(meal_id, session.get("user_id")),
             rating_error=None,
-            diets=db.get_diets(),
+            diets=meals.get_diets(),
         )
 
-    comment_id = db.add_meal_comment(
+    comment_id = meals.add_meal_comment(
         meal_id,
         session.get("user_name"),
         comment_body,
         commenter_user_id=session["user_id"],
     )
-    db.create_notification(
+    meals.create_notification(
         meal["user_id"],
         session["user_id"],
         meal_id,
@@ -626,7 +628,7 @@ def reply_to_meal_comment(meal_id, comment_id):
             fallback=f"/meal/{meal_id}",
         )
 
-    parent_comment = db.get_meal_comment_target(comment_id, meal_id)
+    parent_comment = meals.get_meal_comment_target(comment_id, meal_id)
     if not parent_comment:
         return redirect_with_error(
             "That comment could not be found.", fallback=f"/meal/{meal_id}"
@@ -642,17 +644,17 @@ def reply_to_meal_comment(meal_id, comment_id):
         return render_template(
             "meal_detail.html",
             meal=meal,
-            comments=db.get_meal_comments(meal_id),
+            comments=meals.get_meal_comments(meal_id),
             comment_error=None,
-            ratings=db.get_meal_rating_summary(meal_id, user_id),
+            ratings=meals.get_meal_rating_summary(meal_id, user_id),
             rating_error=None,
             reply_error=error,
             reply_comment_id=comment_id,
             reply_body=reply_body,
-            diets=db.get_diets(),
+            diets=meals.get_diets(),
         )
 
-    reply_id = db.add_meal_comment(
+    reply_id = meals.add_meal_comment(
         meal_id,
         session.get("user_name"),
         reply_body,
@@ -660,7 +662,7 @@ def reply_to_meal_comment(meal_id, comment_id):
         session["user_id"],
     )
     if parent_comment["commenter_user_id"] is not None:
-        db.create_notification(
+        meals.create_notification(
             parent_comment["commenter_user_id"],
             session["user_id"],
             meal_id,
@@ -683,16 +685,16 @@ def rate_meal(meal_id):
 
     try:
         rating = int(request.form.get("rating", ""))
-        db.save_meal_rating(meal_id, user_id, rating)
+        meals.save_meal_rating(meal_id, user_id, rating)
     except (TypeError, ValueError):
         return render_template(
             "meal_detail.html",
             meal=meal,
-            comments=db.get_meal_comments(meal_id),
+            comments=meals.get_meal_comments(meal_id),
             comment_error=None,
-            ratings=db.get_meal_rating_summary(meal_id, user_id),
+            ratings=meals.get_meal_rating_summary(meal_id, user_id),
             rating_error="Choose a rating from 1 to 5 stars.",
-            diets=db.get_diets(),
+            diets=meals.get_diets(),
         )
 
     return redirect(f"/meal/{meal_id}")
@@ -744,8 +746,8 @@ def edit_meal(meal_id):
                 fat_value=fat,
                 price_value=price,
                 selected_diets=selected_diets,
-                diets=db.get_diets(),
-                meal_types=db.get_meal_types(),
+                diets=meals.get_diets(),
+                meal_types=meals.get_meal_types(),
                 errors=[str(error)],
             )
         return redirect("/")
@@ -759,8 +761,8 @@ def edit_meal(meal_id):
         "edit_meal.html",
         meal=meal,
         selected_diets=selected_diets,
-        diets=db.get_diets(),
-        meal_types=db.get_meal_types(),
+        diets=meals.get_diets(),
+        meal_types=meals.get_meal_types(),
     )
 
 
@@ -790,8 +792,8 @@ def add_meal():
         return render_form_with_errors(
             "meal.html",
             errors=["You must be logged in to add a meal."],
-            diets=db.get_diets(),
-            meal_types=db.get_meal_types(),
+            diets=meals.get_diets(),
+            meal_types=meals.get_meal_types(),
         )
 
     name = request.form.get("name", "")
@@ -817,8 +819,8 @@ def add_meal():
         return render_form_with_errors(
             "meal.html",
             errors=errors,
-            diets=db.get_diets(),
-            meal_types=db.get_meal_types(),
+            diets=meals.get_diets(),
+            meal_types=meals.get_meal_types(),
             meal_name=name,
             meal_type_value=meal_type,
             calories_value=calories,
@@ -845,8 +847,8 @@ def add_meal():
         return render_form_with_errors(
             "meal.html",
             errors=[str(error)],
-            diets=db.get_diets(),
-            meal_types=db.get_meal_types(),
+            diets=meals.get_diets(),
+            meal_types=meals.get_meal_types(),
             meal_name=name,
             meal_type_value=meal_type,
             calories_value=calories,

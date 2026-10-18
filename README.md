@@ -42,7 +42,7 @@ Start the development server:
 python3 app.py
 ```
 
-On startup, the application initializes the SQLite schema from `init.sql` and creates or updates supporting tables. The database file, `database.db`, is created in the current working directory. Run the command from the project directory, and keep `init.sql` alongside `db.py`.
+On startup, the application initializes the SQLite schema from `init.sql`. Existing databases are not migrated; use a database created with the current schema. The database file, `database.db`, is created in the current working directory. Run the command from the project directory, and keep `init.sql` alongside `db.py`.
 
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in a browser and register an account to add meals.
 

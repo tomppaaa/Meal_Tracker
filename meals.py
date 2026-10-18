@@ -4,6 +4,7 @@ import db
 
 MAX_MEAL_NAME_LENGTH = 50
 MAX_MEAL_TYPE_LENGTH = 50
+MAX_COMMENT_LENGTH = 1000
 
 
 def _normalize_meal_name(name):
@@ -288,6 +289,183 @@ def delete_meal(meal_id):
     return True
 
 
+def get_meal_comments(meal_id):
+    return db.query(
+        """
+        SELECT
+            id,
+            meal_id,
+            author,
+            body,
+            parent_comment_id,
+            commenter_user_id,
+            created_at
+        FROM meal_comments
+        WHERE meal_id = ?
+        ORDER BY created_at DESC, id DESC
+        """,
+        (meal_id,),
+    )
+
+
+def get_meal_types():
+    return db.query("SELECT id, name FROM meal_types ORDER BY id")
+
+
+def get_diets():
+    return db.query("SELECT id, name FROM diets ORDER BY id")
+
+
+def get_meal_comment_target(comment_id, meal_id):
+    rows = db.query(
+        """
+        SELECT id, commenter_user_id
+        FROM meal_comments
+        WHERE id = ? AND meal_id = ?
+        """,
+        (comment_id, meal_id),
+    )
+    return db.row_to_dict(rows[0]) if rows else None
+
+
+def add_meal_comment(
+    meal_id, author, body, parent_comment_id=None, commenter_user_id=None
+):
+    author = (author or "").strip() or "Anonymous"
+    body = (body or "").strip()
+
+    if not body:
+        raise ValueError("Comment cannot be empty.")
+    if len(body) > MAX_COMMENT_LENGTH:
+        raise ValueError("Comment cannot be longer than 1000 characters.")
+
+    db.execute(
+        """
+        INSERT INTO meal_comments (meal_id, author, body, parent_comment_id, commenter_user_id)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (meal_id, author, body, parent_comment_id, commenter_user_id),
+    )
+    return db.last_insert_id()
+
+
+def create_notification(user_id, actor_user_id, meal_id, comment_id, notification_type):
+    if user_id == actor_user_id:
+        return
+    if notification_type not in {"new_comment", "comment_reply"}:
+        raise ValueError("Invalid notification type.")
+    db.execute(
+        """
+        INSERT INTO notifications (user_id, actor_user_id, meal_id, comment_id, notification_type)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (user_id, actor_user_id, meal_id, comment_id, notification_type),
+    )
+
+
+def get_notifications(user_id):
+    return db.query(
+        """
+        SELECT
+            n.id,
+            n.user_id,
+            n.actor_user_id,
+            n.meal_id,
+            n.comment_id,
+            n.notification_type,
+            n.is_read,
+            n.created_at,
+            m.name AS meal_name,
+            actor.username AS actor_username
+        FROM notifications n
+        JOIN meals m ON m.id = n.meal_id
+        LEFT JOIN users actor ON actor.id = n.actor_user_id
+        WHERE n.user_id = ?
+        ORDER BY n.created_at DESC, n.id DESC
+        """,
+        (user_id,),
+    )
+
+
+def get_unread_notification_count(user_id):
+    rows = db.query(
+        """
+        SELECT COUNT(*) AS count
+        FROM notifications
+        WHERE user_id = ? AND is_read = 0
+        """,
+        (user_id,),
+    )
+    return rows[0]["count"]
+
+
+def get_notification_target(notification_id, user_id):
+    rows = db.query(
+        """
+        SELECT meal_id, comment_id
+        FROM notifications
+        WHERE id = ? AND user_id = ?
+        """,
+        (notification_id, user_id),
+    )
+    return db.row_to_dict(rows[0]) if rows else None
+
+
+def mark_notification_read(notification_id, user_id):
+    db.execute(
+        """
+        UPDATE notifications
+        SET is_read = 1
+        WHERE id = ? AND user_id = ?
+        """,
+        (notification_id, user_id),
+    )
+
+
+def get_meal_rating_summary(meal_id, user_id=None):
+    summary = db.query(
+        """
+        SELECT ROUND(AVG(rating), 1) AS average_rating, COUNT(*) AS rating_count
+        FROM meal_ratings
+        WHERE meal_id = ?
+        """,
+        (meal_id,),
+    )[0]
+    user_rating = None
+    if user_id:
+        rows = db.query(
+            """
+            SELECT rating
+            FROM meal_ratings
+            WHERE meal_id = ? AND user_id = ?
+            """,
+            (meal_id, user_id),
+        )
+        user_rating = rows[0]["rating"] if rows else None
+
+    return {
+        "average": summary["average_rating"] or 0,
+        "count": summary["rating_count"],
+        "user_rating": user_rating,
+    }
+
+
+def save_meal_rating(meal_id, user_id, rating):
+    if rating not in range(1, 6):
+        raise ValueError("Rating must be between 1 and 5.")
+
+    db.execute(
+        """
+        INSERT INTO meal_ratings (meal_id, user_id, rating)
+        VALUES (?, ?, ?)
+        ON CONFLICT(meal_id, user_id) DO UPDATE SET
+            rating = excluded.rating,
+            created_at = CURRENT_TIMESTAMP
+        """,
+        (meal_id, user_id, rating),
+    )
+
+
 __all__ = [
     "create_meal",
     "get_meal_by_id",
@@ -296,4 +474,16 @@ __all__ = [
     "search_meals",
     "update_meal",
     "delete_meal",
+    "get_meal_comments",
+    "get_meal_types",
+    "get_diets",
+    "get_meal_comment_target",
+    "add_meal_comment",
+    "create_notification",
+    "get_notifications",
+    "get_unread_notification_count",
+    "get_notification_target",
+    "mark_notification_read",
+    "get_meal_rating_summary",
+    "save_meal_rating",
 ]
