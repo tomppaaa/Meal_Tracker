@@ -65,6 +65,46 @@ def validate_required_fields(payload, rules):
     return errors
 
 
+def render_meal_form(errors=None, **context):
+    return render_form_with_errors(
+        "meal.html",
+        errors=errors,
+        diets=meals.get_diets(),
+        meal_types=meals.get_meal_types(),
+        **context,
+    )
+
+
+def render_meal_detail(meal, user_id, **context):
+    template_context = {
+        "meal": meal,
+        "comments": meals.get_meal_comments(meal["id"]),
+        "comment_error": None,
+        "ratings": meals.get_meal_rating_summary(meal["id"], user_id),
+        "rating_error": None,
+        "diets": meals.get_diets(),
+    }
+    template_context.update(context)
+    return render_template("meal_detail.html", **template_context)
+
+
+def require_login():
+    if not session.get("user_id"):
+        return redirect("/login")
+    return None
+
+
+def start_user_session(user_id, username):
+    session["user_id"] = user_id
+    session["user_name"] = username
+    session["csrf_token"] = secrets.token_urlsafe(32)
+
+
+def clear_user_session():
+    session.pop("user_id", None)
+    session.pop("user_name", None)
+
+
 @app.errorhandler(HTTPException)
 def handle_http_error(error):
     error_messages = {
@@ -230,9 +270,7 @@ def create():
             "register.html", errors=[str(error)], username=username
         )
 
-    session["user_id"] = user_id
-    session["user_name"] = username
-    session["csrf_token"] = secrets.token_urlsafe(32)
+    start_user_session(user_id, username)
     return redirect("/")
 
 
@@ -264,9 +302,7 @@ def login():
                 username=username,
             )
 
-        session["user_id"] = user["id"]
-        session["user_name"] = user["username"]
-        session["csrf_token"] = secrets.token_urlsafe(32)
+        start_user_session(user["id"], user["username"])
         return redirect("/")
 
     return render_form_with_errors("login.html", errors=[], username="")
@@ -274,21 +310,20 @@ def login():
 
 @app.route("/logout")
 def logout():
-    session.pop("user_id", None)
-    session.pop("user_name", None)
+    clear_user_session()
     return redirect("/")
 
 
 @app.route("/profile")
 def profile():
-    user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
 
+    user_id = session.get("user_id")
     user = users.get_user_by_id(user_id)
     if not user:
-        session.pop("user_id", None)
-        session.pop("user_name", None)
+        clear_user_session()
         return redirect("/login")
 
     context = build_profile_view(user_id, user)
@@ -298,14 +333,14 @@ def profile():
 
 @app.route("/profile/settings")
 def profile_settings():
-    user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
 
+    user_id = session.get("user_id")
     user = users.get_user_by_id(user_id)
     if not user:
-        session.pop("user_id", None)
-        session.pop("user_name", None)
+        clear_user_session()
         return redirect("/login")
 
     return render_form_with_errors("profile_settings.html", errors=[], user=user)
@@ -313,10 +348,11 @@ def profile_settings():
 
 @app.route("/profile/change-password", methods=["POST"])
 def change_password():
-    user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
 
+    user_id = session.get("user_id")
     current_password = request.form.get("current_password", "")
     new_password = request.form.get("new_password", "")
     confirm_password = request.form.get("confirm_password", "")
@@ -346,10 +382,11 @@ def change_password():
 
 @app.route("/profile/change-username", methods=["POST"])
 def change_username():
-    user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
 
+    user_id = session.get("user_id")
     new_username = request.form.get("new_username", "").strip()
     password = request.form.get("password", "")
 
@@ -389,10 +426,11 @@ def change_username():
 
 @app.route("/profile/delete-account", methods=["POST"])
 def delete_account():
-    user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
 
+    user_id = session.get("user_id")
     password = request.form.get("password", "")
     user = users.get_user_by_id(user_id)
     if not user:
@@ -406,20 +444,19 @@ def delete_account():
         )
 
     users.delete_user(user_id)
-    session.pop("user_id", None)
-    session.pop("user_name", None)
+    clear_user_session()
     return redirect("/")
 
 
 @app.route("/profile/meals")
 def profile_meals():
-    user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
 
+    user_id = session.get("user_id")
     if not users.get_user_by_id(user_id):
-        session.pop("user_id", None)
-        session.pop("user_name", None)
+        clear_user_session()
         return redirect("/login")
 
     return redirect("/profile")
@@ -514,15 +551,13 @@ def show_form():
 @app.route("/meals", methods=["POST"])
 @app.route("/add_meal", methods=["POST"])
 def add_meal():
-    user_id = session.get("user_id")
-    if not user_id:
-        return render_form_with_errors(
-            "meal.html",
-            errors=["You must be logged in to add a meal."],
-            diets=meals.get_diets(),
-            meal_types=meals.get_meal_types(),
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return render_meal_form(
+            errors=["You must be logged in to add a meal."]
         )
 
+    user_id = session.get("user_id")
     name = request.form.get("name", "")
     meal_type = request.form.get("meal_type", "")
     calories = request.form.get("calories", 0)
@@ -543,11 +578,8 @@ def add_meal():
         errors.append("Meal name cannot be longer than 50 characters.")
 
     if errors:
-        return render_form_with_errors(
-            "meal.html",
+        return render_meal_form(
             errors=errors,
-            diets=meals.get_diets(),
-            meal_types=meals.get_meal_types(),
             meal_name=name,
             meal_type_value=meal_type,
             calories_value=calories,
@@ -571,11 +603,8 @@ def add_meal():
             diet_tags=diet_tags,
         )
     except ValueError as error:
-        return render_form_with_errors(
-            "meal.html",
+        return render_meal_form(
             errors=[str(error)],
-            diets=meals.get_diets(),
-            meal_types=meals.get_meal_types(),
             meal_name=name,
             meal_type_value=meal_type,
             calories_value=calories,
@@ -595,17 +624,7 @@ def meal_detail(meal_id):
     meal = meals.get_meal_by_id(meal_id)
     if not meal:
         return redirect_with_error("That meal could not be found.", fallback="/")
-    comments = meals.get_meal_comments(meal_id)
-    ratings = meals.get_meal_rating_summary(meal_id, session.get("user_id"))
-    return render_template(
-        "meal_detail.html",
-        meal=meal,
-        comments=comments,
-        comment_error=None,
-        ratings=ratings,
-        rating_error=None,
-        diets=meals.get_diets(),
-    )
+    return render_meal_detail(meal, session.get("user_id"))
 
 
 @app.route("/meals/<int:meal_id>/edit", methods=["GET", "POST"])
@@ -698,22 +717,20 @@ def rate_meal(meal_id):
     if not meal:
         return redirect_with_error("That meal could not be found.", fallback="/")
 
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
+
     user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
 
     try:
         rating = int(request.form.get("rating", ""))
         meals.save_meal_rating(meal_id, user_id, rating)
     except (TypeError, ValueError):
-        return render_template(
-            "meal_detail.html",
-            meal=meal,
-            comments=meals.get_meal_comments(meal_id),
-            comment_error=None,
-            ratings=meals.get_meal_rating_summary(meal_id, user_id),
+        return render_meal_detail(
+            meal,
+            user_id,
             rating_error="Choose a rating from 1 to 5 stars.",
-            diets=meals.get_diets(),
         )
 
     return redirect(f"/meal/{meal_id}")
@@ -726,31 +743,24 @@ def add_meal_comment(meal_id):
     if not meal:
         return redirect_with_error("That meal could not be found.", fallback="/")
 
-    if not session.get("user_id"):
-        return redirect("/login")
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
 
     comment_body = request.form.get("comment", "").strip()
     if not comment_body:
-        return render_template(
-            "meal_detail.html",
-            meal=meal,
-            comments=meals.get_meal_comments(meal_id),
+        return render_meal_detail(
+            meal,
+            session.get("user_id"),
             comment_error="Comment cannot be empty.",
             comment_body=comment_body,
-            ratings=meals.get_meal_rating_summary(meal_id, session.get("user_id")),
-            rating_error=None,
-            diets=meals.get_diets(),
         )
     if len(comment_body) > 1000:
-        return render_template(
-            "meal_detail.html",
-            meal=meal,
-            comments=meals.get_meal_comments(meal_id),
+        return render_meal_detail(
+            meal,
+            session.get("user_id"),
             comment_error="Comment cannot be longer than 1000 characters.",
             comment_body=comment_body,
-            ratings=meals.get_meal_rating_summary(meal_id, session.get("user_id")),
-            rating_error=None,
-            diets=meals.get_diets(),
         )
 
     comment_id = meals.add_meal_comment(
@@ -776,9 +786,11 @@ def reply_to_meal_comment(meal_id, comment_id):
     if not meal:
         return redirect_with_error("That meal could not be found.", fallback="/")
 
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
+
     user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
     if user_id != meal["user_id"]:
         return redirect_with_error(
             "Only the meal owner can reply to comments.",
@@ -798,17 +810,12 @@ def reply_to_meal_comment(meal_id, comment_id):
             if not reply_body
             else "Reply cannot be longer than 1000 characters."
         )
-        return render_template(
-            "meal_detail.html",
-            meal=meal,
-            comments=meals.get_meal_comments(meal_id),
-            comment_error=None,
-            ratings=meals.get_meal_rating_summary(meal_id, user_id),
-            rating_error=None,
+        return render_meal_detail(
+            meal,
+            user_id,
             reply_error=error,
             reply_comment_id=comment_id,
             reply_body=reply_body,
-            diets=meals.get_diets(),
         )
 
     reply_id = meals.add_meal_comment(
@@ -832,9 +839,11 @@ def reply_to_meal_comment(meal_id, comment_id):
 @app.route("/notifications")
 @app.route("/messages")
 def messages():
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
+
     user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
     return render_template(
         "messages.html", notifications=meals.get_notifications(user_id)
     )
@@ -843,10 +852,11 @@ def messages():
 @app.route("/notifications/<int:notification_id>/open")
 @app.route("/messages/<int:notification_id>/open")
 def open_notification(notification_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return redirect("/login")
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
 
+    user_id = session.get("user_id")
     notification = meals.get_notification_target(notification_id, user_id)
     if not notification:
         return redirect_with_error(
